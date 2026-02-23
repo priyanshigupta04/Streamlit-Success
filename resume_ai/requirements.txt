@@ -1,0 +1,13 @@
+flask
+scikit-learn
+pandas
+nltk
+python-dotenv
+sentence-transformers
+pymongo
+PyPDF2
+streamlit
+fastapi
+uvicorn
+joblib
+pydantic
