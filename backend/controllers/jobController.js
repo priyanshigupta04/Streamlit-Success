@@ -245,6 +245,12 @@ exports.getRecommendedJobs = async (req, res) => {
         }
       }
 
+      // if AI returned no matches (rankings empty) or failed to match any job,
+      // fall back to unranked job list so frontend still has something to show.
+      if (rankedJobs.length === 0) {
+        return res.json({ jobs });
+      }
+
       return res.json({ jobs: rankedJobs });
     } catch (aiError) {
       console.error('AI Recommendation failed, returning unranked jobs:', aiError.message);
