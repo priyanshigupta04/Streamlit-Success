@@ -65,10 +65,19 @@ exports.applyToJob = async (req, res) => {
 // GET /api/applications/mine — student's own applications
 exports.getMyApplications = async (req, res) => {
   try {
+
     const apps = await Application.find({ studentId: req.user._id })
       .populate('jobId', 'title company location stipend status type')
-      .sort({ createdAt: -1 });
-    res.json({ applications: apps });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const applications = apps.map(app => ({
+      ...app,
+      interview: app.interviewDetails || null
+    }));
+
+    res.json({ applications });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -100,25 +109,38 @@ exports.getAllApplications = async (req, res) => {
   try {
     let query = {};
     
-    // If user is a mentor, try to show only their assigned students' applications
-    // but fall back to all applications if no students are explicitly assigned
+    // If user is a mentor, restrict to students in their department.
+    // Use mentorId fallback if department is missing.
     if (req.user.role === 'mentor') {
-      const mentorStudents = await User.find({ mentorId: req.user._id }).select('_id');
-      const studentIds = mentorStudents.map(s => s._id);
-      if (studentIds.length > 0) {
-        // Only filter by assigned students if there are any
-        query = { studentId: { $in: studentIds } };
+      if (req.user.department) {
+        const deptStudents = await User.find({ department: req.user.department, role: 'student' }).select('_id');
+        const studentIds = deptStudents.map(s => s._id);
+        if (studentIds.length > 0) {
+          query = { studentId: { $in: studentIds } };
+        }
+      } else {
+        // no department? fall back to assigned students by mentorId
+        const mentorStudents = await User.find({ mentorId: req.user._id }).select('_id');
+        const studentIds = mentorStudents.map(s => s._id);
+        if (studentIds.length > 0) {
+          query = { studentId: { $in: studentIds } };
+        }
       }
-      // If no students are assigned, show all apps (so mentor can still review)
+      // If still no students found, show all apps as before
     }
     // For placement_cell, hod, dean: show all applications (query = {})
 
     const apps = await Application.find(query)
-      .populate('studentId', 'name email branch cgpa skills resumeUrl mentorId')
-      .populate('jobId', 'title company location stipend postedBy')
-      .sort({ createdAt: -1 });
-    
-    res.json({ applications: apps });
+  .populate('jobId', 'title company location stipend status type')
+  .sort({ createdAt: -1 })
+  .lean();
+
+const applications = apps.map(app => ({
+  ...app,
+  interview: app.interviewDetails || null
+}));
+
+res.json({ applications });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -306,6 +328,77 @@ exports.mentorRejectApplication = async (req, res) => {
       message: 'Application rejected successfully',
       application: app 
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+// PUT /api/applications/:id/schedule-interview — recruiter schedules interview
+exports.scheduleInterview = async (req, res) => {
+  try {
+    const jobId = req.params.jobId;
+    const { date, time, mode, meetingLink, location } = req.body;
+
+    const app = await Application.findById(req.params.id)
+      .populate('studentId', 'name email')
+      .populate('jobId', 'title company postedBy');
+
+    if (!app) return res.status(404).json({ message: 'Application not found' });
+
+    // Authorization check
+    if (app.jobId && app.jobId.postedBy) {
+      if (
+        app.jobId.postedBy.toString() !== req.user._id.toString() &&
+        req.user.role !== 'placement_cell'
+      ) {
+        return res.status(403).json({ message: 'Not authorized' });
+      }
+    }
+
+    // Update interview details
+    app.status = 'interview_scheduled';
+    app.interviewScheduled = true;
+
+    app.interviewDetails = {
+      date,
+      time,
+      mode,
+      meetingLink: meetingLink || '',
+      location: location || ''
+    };
+
+    app.interviewScheduledBy = req.user._id;
+
+    await app.save();
+
+    const jobTitle = app.jobId?.title || app.jobTitle || 'the position';
+    const company = app.jobId?.company || app.company || '';
+
+    // Notify student
+    await Notification.send(
+      app.studentId._id,
+      'application_status',
+      '📅 Interview Scheduled',
+      `Your interview for ${jobTitle} at ${company} is scheduled on ${date} at ${time}. ${meetingLink ? `Join here: ${meetingLink}` : ""}`,
+      '/student-dashboard'
+    );
+
+    // Notify mentor (if exists)
+    const student = await User.findById(app.studentId._id).select('mentorId name');
+    if (student?.mentorId) {
+      await Notification.send(
+        student.mentorId,
+        'application_status',
+        '📅 Student Interview Scheduled',
+        `${student.name}'s interview for ${jobTitle} ${company ? `at ${company}` : ''} is scheduled on ${date} at ${time}.`,
+        '/mentor-dashboard'
+      );
+    }
+
+    res.json({
+      message: 'Interview scheduled successfully',
+      application: app
+    });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

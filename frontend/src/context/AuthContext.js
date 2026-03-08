@@ -12,9 +12,18 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem("token");
     if (token) {
       axios.get("/api/auth/me")
-        .then(res => setUser(res.data.user))
-        .catch(() => localStorage.removeItem("token"))
-        .finally(() => setLoading(false));
+        .then(res => {
+        const usr = res.data.user;
+        // if mentor lacks department, treat as unauthorized
+        if (usr.role === 'mentor' && !usr.department) {
+          localStorage.removeItem("token");
+          setUser(null);
+        } else {
+          setUser(usr);
+        }
+      })
+      .catch(() => localStorage.removeItem("token"))
+      .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
@@ -24,7 +33,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await axios.post("/api/auth/login", { email, password });
       localStorage.setItem("token", res.data.token);
-      setUser(res.data.user);
+      const usr = res.data.user;
+      if (usr.role === 'mentor' && !usr.department) {
+        throw new Error('Mentor account not linked to any department. Contact admin.');
+      }
+      setUser(usr);
       return res.data.user; // return user so caller can read role
     } catch (err) {
       const message = err?.response?.data?.message || err.message || "Login failed";

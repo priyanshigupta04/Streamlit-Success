@@ -16,11 +16,26 @@ const MentorDashboard = () => {
   const [approvalNote, setApprovalNote] = useState('');
   const [appApprovalNote, setAppApprovalNote] = useState('');
   const [appActionId, setAppActionId] = useState(null);
-
+ const [students, setStudents] = useState([]);
+const [interviewStudents, setInterviewStudents] = useState([]);
   useEffect(() => {
     fetchPendingDocs();
     fetchApplications();
+    fetchStudents();
+    fetchInterviewStudents();
   }, []);
+  const fetchInterviewStudents = async () => {
+  try {
+
+    const res = await axios.get("/api/mentors/interview-students");
+setInterviewStudents(res.data.interviews || []);
+
+    setInterviewStudents(res.data.interviews || []);
+
+  } catch (err) {
+    console.error("Failed to fetch interview students", err);
+  }
+};
 
   const fetchPendingDocs = async () => {
     try {
@@ -40,6 +55,15 @@ const MentorDashboard = () => {
       setApplications(res.data.applications || []);
     } catch (err) {
       console.error('Failed to fetch applications', err);
+    }
+  };
+
+  const fetchStudents = async () => {
+    try {
+      const res = await axios.get('/api/mentors/students');
+      setStudents(res.data.students || []);
+    } catch (err) {
+      console.error('Failed to fetch students', err);
     }
   };
 
@@ -292,9 +316,83 @@ const MentorDashboard = () => {
           {activeTab === 'students' && (
             <div>
               <h2 className="text-2xl font-bold text-gray-800 mb-6">My Students</h2>
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-500 text-center py-8">Students assigned to you will appear here</p>
-              </div>
+              {students.length === 0 ? (
+                <p className="text-gray-500">No students registered in your department yet.</p>
+              ) : (
+                <div className="space-y-4">
+
+{/* NORMAL STUDENTS */}
+
+<h3 className="font-semibold text-gray-700">Department Students</h3>
+
+{students.map(s => (
+  <div key={s._id} className="p-4 bg-white rounded-lg shadow-sm">
+    <p className="font-medium text-gray-800">{s.name}</p>
+    <p className="text-sm text-gray-500">{s.email}</p>
+  </div>
+))}
+
+
+{/* INTERVIEW STUDENTS */}
+
+<h3 className="font-semibold text-gray-700 mt-6">
+Students Selected for Interview
+</h3>
+
+{interviewStudents.length === 0 ? (
+  <p className="text-gray-500">No interviews scheduled yet.</p>
+) : (
+  interviewStudents.map(app => (
+
+    <div key={app._id} className="bg-white p-5 rounded-xl shadow">
+
+      <h4 className="font-semibold text-gray-800">
+        {app.studentId?.name}
+      </h4>
+
+      <p className="text-sm text-gray-500">
+        {app.studentId?.email}
+      </p>
+
+      <div className="mt-3 text-sm text-gray-700">
+
+        <p>
+          <b>Job:</b> {app.jobId?.title}
+        </p>
+
+        <p>
+          <b>Company:</b> {app.jobId?.company}
+        </p>
+
+        <p>
+          <b>Interview Date:</b>{" "}
+          {new Date(app.interview?.date).toLocaleDateString()}
+        </p>
+
+        <p>
+          <b>Time:</b> {app.interview?.time}
+        </p>
+
+        {app.interview?.meetingLink && (
+          <a
+            href={app.interview.meetingLink}
+            target="_blank"
+            rel="noreferrer"
+            className="text-indigo-600 underline"
+          >
+            Join Meeting
+          </a>
+        )}
+
+      </div>
+
+    </div>
+
+  ))
+)}
+
+</div>
+              )}
             </div>
           )}
         </main>

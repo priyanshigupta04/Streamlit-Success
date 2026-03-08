@@ -2,6 +2,7 @@ const User = require('../models/User');
 const DepartmentMentor = require('../models/DepartmentMentor');
 
 const DEPARTMENTS = ['SOCSET', 'SOTE', 'SOB', 'SAAD'];
+const Application = require("../models/Application");
 
 // Get all mentor assignments
 exports.getAllMentors = async (req, res) => {
@@ -164,13 +165,17 @@ exports.removeMentor = async (req, res) => {
   }
 };
 
-// Get students for a specific department (for mentor access)
+// Get students for the mentor's own department
 exports.getDepartmentStudents = async (req, res) => {
   try {
-    const { department } = req.params;
     const mentorId = req.user._id;
+    const department = req.user.department; // set by middleware/login
 
-    // Verify mentor is assigned to this department
+    if (!department) {
+      return res.status(400).json({ message: 'Your mentor account is not associated with a department' });
+    }
+
+    // verify assignment still exists
     const mentorAssignment = await DepartmentMentor.findOne({ department, mentorId });
     if (!mentorAssignment) {
       return res.status(403).json({ message: 'You are not assigned to this department' });
@@ -183,5 +188,30 @@ exports.getDepartmentStudents = async (req, res) => {
     res.json({ department, students });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch department students', error: err.message });
+  }
+};
+
+
+exports.getInterviewStudents = async (req, res) => {
+  try {
+    const mentorId = req.user._id;
+
+    // 1️⃣ Find students assigned to this mentor
+    const students = await User.find({ mentorId, role: 'student' }).select('_id name email');
+    const studentIds = students.map(s => s._id);
+
+    // 2️⃣ Fetch only scheduled interviews for these students
+    const interviews = await Application.find({
+      studentId: { $in: studentIds },
+      interviewScheduled: true
+    })
+    .populate('studentId', 'name email')
+    .populate('jobId', 'title company location')
+    .lean();
+
+    res.json({ interviews });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch scheduled interviews' });
   }
 };

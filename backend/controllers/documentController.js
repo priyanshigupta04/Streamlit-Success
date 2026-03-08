@@ -1,5 +1,6 @@
 const DocumentRequest = require("../models/DocumentRequest");
 const Notification = require("../models/Notification");
+const User = require("../models/User");
 
 // POST /api/documents/request — student requests a document
 exports.requestDocument = async (req, res) => {
@@ -41,6 +42,13 @@ exports.getPendingDocuments = async (req, res) => {
 
     if (role === 'mentor') {
       filter.overallStatus = 'pending';
+      // additional restriction: only show documents belonging to the mentor's department
+      if (req.user.department) {
+        // find students in that department
+        const students = await User.find({ department: req.user.department, role: 'student' }).select('_id');
+        const ids = students.map(s => s._id);
+        filter.studentId = { $in: ids };
+      }
     } else if (role === 'hod') {
       filter.overallStatus = 'mentor_approved';
     } else if (role === 'dean') {

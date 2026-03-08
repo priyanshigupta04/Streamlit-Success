@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const DepartmentMentor = require('../models/DepartmentMentor');
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -63,9 +64,27 @@ const login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // 3. Generate JWT token
+    // If user is a mentor make sure they are assigned to a department
+    let department;
+    if (user.role === 'mentor') {
+      const assignment = await DepartmentMentor.findOne({ mentorId: user._id });
+      if (!assignment) {
+        // prevent unassigned mentors (including other faculty) from logging in as mentor
+        return res.status(403).json({ message: 'Mentor account not linked to any department. Contact admin.' });
+      }
+      department = assignment.department;
+      // keep user.department in sync
+      if (!user.department || user.department !== department) {
+        user.department = department;
+        await user.save();
+      }
+    }
+
+    // 3. Generate JWT token with optional department
+    const payload = { id: user._id, role: user.role };
+    if (department) payload.department = department;
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      payload,
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
@@ -76,7 +95,8 @@ const login = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        department: department || user.department
       }
     });
 

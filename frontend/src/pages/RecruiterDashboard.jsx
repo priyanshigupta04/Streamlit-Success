@@ -11,7 +11,7 @@ import {
 const STATUS_COLORS = {
   applied: 'bg-blue-100 text-blue-700',
   under_review: 'bg-yellow-100 text-yellow-700',
-  shortlisted: 'bg-purple-100 text-purple-700',
+  selected: 'bg-purple-100 text-purple-700',
   interview: 'bg-indigo-100 text-indigo-700',
   offered: 'bg-green-100 text-green-700',
   rejected: 'bg-red-100 text-red-700',
@@ -27,12 +27,35 @@ const RecruiterDashboard = () => {
   const [showPostForm, setShowPostForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+
+
+const [interviewForm, setInterviewForm] = useState({
+  date: '',
+  time: '',
+  mode: 'online',
+  meetingLink: '',
+  location: ''
+});
 
   const [jobForm, setJobForm] = useState({
     title: '', company: user?.companyName || '', type: 'internship',
     domain: '', description: '', requiredSkills: '',
     eligibility: '', stipend: '', location: '', duration: '', deadline: '',
   });
+  const StatCard = ({ icon: Icon, label, value, color }) => (
+  <div className="bg-white rounded-2xl shadow-md hover:shadow-xl transition p-6 flex items-center gap-5">
+    <div className={`${color} p-4 rounded-xl text-white shadow`}>
+      <Icon size={26} />
+    </div>
+
+    <div>
+      <p className="text-3xl font-bold text-gray-800">{value}</p>
+      <p className="text-sm text-gray-500">{label}</p>
+    </div>
+  </div>
+);
+  
 
   // Fetch my jobs
   useEffect(() => {
@@ -88,14 +111,42 @@ const RecruiterDashboard = () => {
   };
 
   const handleStatusUpdate = async (appId, newStatus) => {
-    try {
-      await axios.put(`/api/applications/${appId}/status`, { status: newStatus });
-      fetchApplicants(selectedJob._id);
-    } catch (err) {
-      alert('Failed to update status');
-    }
-  };
+  console.log('Updating status:', { appId, newStatus });
 
+  try {
+
+    const res = await axios.put(
+      `/api/applications/${appId}/status`,
+      { status: newStatus }
+    );
+
+    console.log("Status updated:", res.data);
+
+    fetchApplicants(selectedJob._id);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to update status");
+  }
+};
+const handleScheduleInterview = async () => {
+  try {
+
+    const res = await axios.put(
+      `/api/applications/schedule-interview/${selectedJob._id}`,
+      interviewForm
+    );
+
+    alert("Interview scheduled successfully");
+
+    setShowInterviewModal(false);
+
+  } catch (err) {
+
+    alert("Failed to schedule interview");
+
+  }
+};
   const viewApplicants = (job) => {
     setSelectedJob(job);
     fetchApplicants(job._id);
@@ -113,11 +164,11 @@ const RecruiterDashboard = () => {
   const closedJobs = jobs.filter(j => j.status === 'closed');
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
       <Navbar />
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-white border-r min-h-[calc(100vh-64px)] p-4">
+        <aside className="w-64 bg-white/80 backdrop-blur border-r shadow-sm min-h-[calc(100vh-64px)] p-5">
           <div className="mb-6">
             <h3 className="font-semibold text-gray-800 text-lg">{user?.name}</h3>
             <p className="text-sm text-gray-500">{user?.companyName || 'Recruiter'}</p>
@@ -125,7 +176,9 @@ const RecruiterDashboard = () => {
           <nav className="space-y-1">
             {tabs.map(t => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}>
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeTab === t.key
+  ? 'bg-indigo-600 text-white shadow-md'
+  : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'}`}>
                 <t.icon size={18} />
                 {t.label}
               </button>
@@ -134,7 +187,7 @@ const RecruiterDashboard = () => {
         </aside>
 
         {/* Main */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-8 space-y-6">
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
             <div>
@@ -144,7 +197,7 @@ const RecruiterDashboard = () => {
                 <StatCard icon={CheckCircle2} label="Open Jobs" value={openJobs.length} color="bg-green-500" />
                 <StatCard icon={Users} label="Total Applicants" value={jobs.reduce((sum, j) => sum + (j.applicantCount || 0), 0)} color="bg-purple-500" />
               </div>
-              <div className="bg-white rounded-xl shadow-sm p-6">
+              <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition p-6">
                 <h3 className="font-semibold text-gray-800 mb-4">Recent Listings</h3>
                 {jobs.slice(0, 5).map(job => (
                   <div key={job._id} className="flex items-center justify-between py-3 border-b last:border-0">
@@ -213,7 +266,7 @@ const RecruiterDashboard = () => {
               </div>
               <div className="space-y-4">
                 {jobs.filter(j => j.title.toLowerCase().includes(searchTerm.toLowerCase())).map(job => (
-                  <div key={job._id} className="bg-white rounded-xl shadow-sm p-5 flex items-center justify-between">
+                  <div key={job._id} className="bg-white rounded-2xl shadow-md hover:shadow-lg transition p-6 flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-gray-800">{job.title}</h3>
@@ -250,13 +303,29 @@ const RecruiterDashboard = () => {
           {/* APPLICANTS TAB */}
           {activeTab === 'applicants' && (
             <div>
-              <div className="flex items-center gap-3 mb-6">
-                <button onClick={() => setActiveTab('listings')} className="text-gray-400 hover:text-gray-600">← Back</button>
-                <h2 className="text-2xl font-bold text-gray-800">
-                  {selectedJob ? `Applicants for: ${selectedJob.title}` : 'Select a job to view applicants'}
-                </h2>
-              </div>
-              {!selectedJob ? (
+              <div className="flex items-center justify-between mb-8 bg-white p-5 rounded-2xl shadow-md">
+  <div className="flex items-center gap-4">
+    
+    <button
+      onClick={() => setActiveTab('listings')}
+      className="text-gray-500 hover:text-indigo-600 text-sm"
+    >
+      ← Back
+    </button>
+
+    <h2 className="text-2xl font-bold text-gray-800">
+      Applicants for: {selectedJob?.title}
+    </h2>
+
+  </div>
+
+  <button
+    onClick={() => setShowInterviewModal(true)}
+    className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium shadow hover:bg-indigo-700 transition"
+  >
+    Schedule Interview
+  </button>
+</div>              {!selectedJob ? (
                 <div className="bg-white rounded-xl shadow-sm p-6">
                   <p className="text-gray-500 mb-4">Choose a job from listings to view applicants</p>
                   {jobs.map(job => (
@@ -274,7 +343,7 @@ const RecruiterDashboard = () => {
                     </div>
                   )}
                   {applicants.map(app => (
-                    <div key={app._id} className="bg-white rounded-xl shadow-sm p-5">
+                    <div key={app._id} className="bg-white rounded-2xl shadow-md hover:shadow-lg transition p-6 border border-gray-100">
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <h4 className="font-semibold text-gray-800">{app.studentId?.name || 'Student'}</h4>
@@ -295,13 +364,23 @@ const RecruiterDashboard = () => {
                         <p className="text-sm text-gray-600 mb-3 bg-gray-50 p-3 rounded-lg">{app.coverNote}</p>
                       )}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {['under_review', 'shortlisted', 'interview', 'offered', 'rejected'].map(s => (
-                          <button key={s} onClick={() => handleStatusUpdate(app._id, s)}
-                            disabled={app.status === s}
-                            className={`px-3 py-1 rounded text-xs font-medium transition ${app.status === s ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-                            {s.replace('_', ' ')}
-                          </button>
-                        ))}
+                        {['under_review','selected','interview','offered','rejected'].map(s => (
+  <button
+    key={s}
+    onClick={() => handleStatusUpdate(app._id, s)}
+    disabled={app.status?.toLowerCase() === s}
+    className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+      app.status?.toLowerCase() === s
+        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+        : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+    }`}
+  >
+    
+    {s.replace('_', ' ')}
+  </button>
+))}
+
+
                       </div>
                     </div>
                   ))}
@@ -310,8 +389,76 @@ const RecruiterDashboard = () => {
             </div>
           )}
         </main>
+        {showInterviewModal && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl border border-gray-100">
+      <h3 className="text-lg font-semibold mb-4">Schedule Interview</h3>
+
+      <div className="space-y-3">
+
+        <Input
+          label="Interview Date"
+          type="date"
+          value={interviewForm.date}
+          onChange={(v)=>setInterviewForm({...interviewForm,date:v})}
+        />
+
+        <Input
+          label="Interview Time"
+          type="time"
+          value={interviewForm.time}
+          onChange={(v)=>setInterviewForm({...interviewForm,time:v})}
+        />
+
+        <Select
+          label="Mode"
+          value={interviewForm.mode}
+          onChange={(v)=>setInterviewForm({...interviewForm,mode:v})}
+          options={[
+            {v:'online',l:'Online'},
+            {v:'offline',l:'Offline'}
+          ]}
+        />
+
+        {interviewForm.mode === 'online' && (
+          <Input
+            label="Meeting Link"
+            value={interviewForm.meetingLink}
+            onChange={(v)=>setInterviewForm({...interviewForm,meetingLink:v})}
+          />
+        )}
+
+        {interviewForm.mode === 'offline' && (
+          <Input
+            label="Interview Location"
+            value={interviewForm.location}
+            onChange={(v)=>setInterviewForm({...interviewForm,location:v})}
+          />
+        )}
+
+      </div>
+
+      <div className="flex justify-end gap-3 mt-6">
+        <button
+          onClick={()=>setShowInterviewModal(false)}
+          className="px-4 py-2 border rounded-lg text-sm"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={handleScheduleInterview}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm"
+        >
+          Schedule Interview
+        </button>
       </div>
     </div>
+  </div>
+)}
+      </div>
+    </div>
+    
   );
 };
 
@@ -340,6 +487,7 @@ const Select = ({ label, value, onChange, options }) => (
       {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
     </select>
   </div>
+
 );
 
 export default RecruiterDashboard;

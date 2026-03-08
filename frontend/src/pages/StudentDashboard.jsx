@@ -122,18 +122,25 @@ const StudentDashboard = () => {
     try {
       const res = await axios.get('/api/applications/mine');
       const apps = (res.data.applications || []).map(a => ({
-        id: a._id,
-        jobId:    a.jobId?._id || a.jobId || null,
-        company:  a.jobId?.company || a.company || 'Unknown',
-        role:     a.jobId?.title  || a.jobTitle || 'Role',
-        loc:      a.jobId?.location || a.location || '',
-        pay:      a.jobId?.stipend || a.stipend || '',
-        logo:     (a.jobId?.company || a.company || '?')[0].toUpperCase(),
-        color:    'bg-slate-700',
-        status:   a.status,
-        mentorApproved: a.mentorApproval?.approved || false,
-        date:     new Date(a.createdAt).toLocaleDateString(),
-      }));
+  id: a._id,
+  jobId: a.jobId?._id || a.jobId || null,
+  company: a.jobId?.company || a.company || 'Unknown',
+  role: a.jobId?.title || a.jobTitle || 'Role',
+  loc: a.jobId?.location || a.location || '',
+  pay: a.jobId?.stipend || a.stipend || '',
+  logo: (a.jobId?.company || a.company || '?')[0].toUpperCase(),
+  color: 'bg-slate-700',
+  status: a.status,
+  
+  mentorApproved: a.mentorApproval?.approved || false,
+  interview: a.interview ? {
+  date: a.interview.date,
+  time: a.interview.time,
+  mode: a.interview.mode,
+  meetingLink: a.interview.meetingLink
+} : null,   // ⭐ ADD THIS
+  date: new Date(a.createdAt).toLocaleDateString(),
+}));
       setMyApplications(apps);
     } catch (err) {
       console.error('Failed to load applications', err);
@@ -188,13 +195,25 @@ const StudentDashboard = () => {
   const handleResumeUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // basic client‑side validation
+    if (file.type !== 'application/pdf') {
+      alert('Please select a PDF file');
+      return;
+    }
+    const MAX = 10 * 1024 * 1024; // match server limit
+    if (file.size > MAX) {
+      alert('Resume must be smaller than 10 MB');
+      return;
+    }
+
     try {
       setUploading(prev => ({ ...prev, resume: true }));
       setUploadProgress(prev => ({ ...prev, resume: 0 }));
       const fd = new FormData();
       fd.append('resume', file);
       const res = await axios.post('/api/upload/resume', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        // do NOT manually set Content-Type – axios will add the boundary for us
         onUploadProgress: (evt) => {
           const pct = Math.round((evt.loaded * 100) / (evt.total || 1));
           setUploadProgress(prev => ({ ...prev, resume: pct }));
@@ -223,7 +242,16 @@ const StudentDashboard = () => {
       alert(`✅ Resume uploaded! ${skillCount ? skillCount + ' skills detected. ' : ''}Fields auto-filled from resume.`);
     } catch (err) {
       console.error('Resume upload failed', err);
-      alert('Resume upload failed: ' + (err.response?.data?.message || err.message));
+      let msg = err.message;
+      if (err.response) {
+        // show whatever the server returned if available
+        console.error('server response', err.response.data);
+        const data = err.response.data;
+        if (data) {
+          msg = data.message || JSON.stringify(data);
+        }
+      }
+      alert('Resume upload failed: ' + msg);
     } finally {
       setUploading(prev => ({ ...prev, resume: false }));
       setUploadProgress(prev => ({ ...prev, resume: 0 }));
@@ -307,6 +335,11 @@ const StudentDashboard = () => {
 
   // 4. JOBS & APPLICATIONS STATE
   const [myApplications, setMyApplications] = useState([]);
+  const scheduledInterview = myApplications.find(
+  app =>
+    ["interview_scheduled", "interview"].includes(app.status) &&
+    app.interview
+);
   const [jobs, setJobs] = useState([]);
   // IDs of jobs the student has already applied to
   const appliedJobIds = new Set(
@@ -403,6 +436,36 @@ const status = getProfileStatus();
       />
 
       <main className="max-w-[1400px] mx-auto p-10">
+        {scheduledInterview && (
+  <div className="bg-indigo-50 border border-indigo-200 p-5 rounded-xl mb-6 flex justify-between items-center">
+    
+    <div>
+      <p className="text-xs font-bold text-indigo-600 uppercase">
+        Interview Scheduled
+      </p>
+
+      <p className="font-semibold">
+        {scheduledInterview.company} — {scheduledInterview.role}
+      </p>
+
+      <p className="text-sm text-gray-600">
+        {scheduledInterview.interview.date} • {scheduledInterview.interview.time}
+      </p>
+    </div>
+
+    {scheduledInterview.interview.meetingLink && (
+      <a
+        href={scheduledInterview.interview.meetingLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm"
+      >
+        Join Interview
+      </a>
+    )}
+
+  </div>
+)}
   <div className="grid grid-cols-12 gap-8"> {/* Grid Wrapper Added */}
     
     {/* 1. PROFILE SUMMARY SIDEBAR (4 Columns) */}
@@ -478,20 +541,63 @@ const status = getProfileStatus();
             <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-8">Submission History</h3>
             <div className="space-y-4">
               {myApplications.map((app, i) => (
-                <div key={i} className="flex items-center justify-between p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 hover:border-black transition-all">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center font-black italic">{app.logo}</div>
-                    <div>
-                      <p className="font-black text-sm uppercase">{app.company}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{app.role}</p>
-                    </div>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">{app.status}</span>
-                    {app.mentorApproved && <span className="text-[10px] font-black text-green-600 uppercase tracking-widest bg-green-50 px-3 py-1 rounded-full block">✓ Mentor Approved</span>}
-                  </div>
-                </div>
-              ))}
+  <div key={i} className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 hover:border-black transition-all">
+
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center font-black italic">
+          {app.logo}
+        </div>
+
+        <div>
+          <p className="font-black text-sm uppercase">{app.company}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.role}</p>
+        </div>
+      </div>
+
+      <div className="text-right space-y-1">
+        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">
+          {app.status}
+        </span>
+      </div>
+    </div>
+
+    {/* ⭐ INTERVIEW SCHEDULE COMPONENT */}
+    {["interview_scheduled","interview"].includes(app.status) && app.interview && (
+      <div className="mt-4 bg-indigo-50 border border-indigo-200 p-4 rounded-xl">
+
+        <p className="text-xs font-bold text-indigo-700 uppercase mb-2">
+          Interview Scheduled
+        </p>
+
+        <p className="text-sm">
+          Date: {new Date(app.interview.date).toLocaleDateString()}
+        </p>
+
+        <p className="text-sm">
+          Time: {app.interview.time}
+        </p>
+
+        <p className="text-sm">
+          Mode: {app.interview.mode}
+        </p>
+
+        {app.interview.meetingLink && (
+          <a
+            href={app.interview.meetingLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-600 underline text-sm"
+          >
+            Join Meeting
+          </a>
+        )}
+
+      </div>
+    )}
+
+  </div>
+))}
             </div>
           </div>
         </div>

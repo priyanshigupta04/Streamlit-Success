@@ -33,6 +33,11 @@ const AuthPage = () => {
   // If already logged in, redirect to correct dashboard
   useEffect(() => {
     if (!loading && user) {
+      // if mentor without department somehow got through, log them out
+      if (user.role === 'mentor' && !user.department) {
+        setError('Mentor account not linked to any department.');
+        return;
+      }
       navigate(ROLE_ROUTES[user.role] || '/dashboard', { replace: true });
     }
   }, [user, loading, navigate]);

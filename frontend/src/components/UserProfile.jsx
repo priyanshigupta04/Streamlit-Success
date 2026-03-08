@@ -11,12 +11,15 @@ const UserProfile = ({ profile, status, setShowModal }) => {
           <div className="relative mb-4">
             <div className="w-28 h-28 bg-slate-100 rounded-[2.2rem] shadow-xl border-4 border-white overflow-hidden flex items-center justify-center">
               {profile.image ? (
-                <img src={profile.image} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-4xl font-black text-slate-300 italic">
-                  {profile.fullName?.[0]?.toUpperCase()}
-                </span>
-              )}
+  <img
+  src={profile?.photo ? profile.photo : "/default-avatar.png"}
+  alt="profile"
+/>
+) : (
+  <span className="text-4xl font-black text-slate-300 italic">
+    {profile.fullName?.[0]?.toUpperCase()}
+  </span>
+)}
             </div>
             <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-6 h-6 rounded-lg border-4 border-white shadow-lg"></div>
           </div>

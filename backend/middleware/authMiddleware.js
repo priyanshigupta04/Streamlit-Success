@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const DepartmentMentor = require('../models/DepartmentMentor');
 
 const protect = async (req, res, next) => {
   let token;
@@ -14,6 +15,15 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       req.user = await User.findById(decoded.id).select("-password");
+      // mentors must be assigned to a department or they cannot use protected areas
+      if (req.user.role === 'mentor') {
+        const assignment = await DepartmentMentor.findOne({ mentorId: req.user._id });
+        if (!assignment) {
+          return res.status(403).json({ message: 'Mentor not linked to a department' });
+        }
+        // attach department to request for convenience
+        req.user.department = assignment.department;
+      }
       next();
     } catch (error) {
       return res.status(401).json({ message: "Not authorized" });

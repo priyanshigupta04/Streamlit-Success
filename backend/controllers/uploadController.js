@@ -32,10 +32,19 @@ const uploadProfileImage = async (req, res) => {
 // ─────────────────────────────────────────────
 const uploadResume = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: 'No file received' });
+    if (!req.file) {
+      // multer didn't pick up the file (wrong field name, bad headers, etc.)
+      return res.status(400).json({ message: 'No file received. Make sure you are uploading a PDF under 10 MB with field name `resume`.' });
+    }
 
-    const resumeUrl  = req.file.path;           // Cloudinary secure_url
-    const resumeName = req.file.originalname;   // original filename
+    // cloudinary multer storage can populate `path`, `secure_url` or `url`
+    const resumeUrl  = req.file.path || req.file.secure_url || req.file.url;
+    const resumeName = req.file.originalname || '';
+
+    if (!resumeUrl) {
+      console.error('uploadResume: Cloudinary returned no URL', req.file);
+      return res.status(500).json({ message: 'Upload succeeded but no URL was returned from Cloudinary' });
+    }
 
     // ── Step 1: Download the PDF text from Cloudinary and send to Python ──
     let parsedFields = {};
@@ -95,8 +104,17 @@ const uploadResume = async (req, res) => {
       user,
     });
   } catch (err) {
-    console.error('uploadResume error:', err.message);
-    res.status(500).json({ message: 'Resume upload failed', error: err.message });
+    // log full error for investigation
+    console.error('uploadResume error:', err);
+    // send back helpful information in development
+    const response = { message: 'Resume upload failed' };
+    if (err.message) response.error = err.message;
+    if (err.stack) response.stack = err.stack;
+    // if it's an axios error, include response data
+    if (err.response) {
+      response.remote = err.response.data || err.response.statusText;
+    }
+    res.status(500).json(response);
   }
 };
 

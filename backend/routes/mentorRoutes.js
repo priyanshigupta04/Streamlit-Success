@@ -3,7 +3,8 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const authorize = require('../middleware/authorize');
 const mentorController = require('../controllers/mentorController');
-
+const { getInterviewStudents } = require("../controllers/mentorController");
+router.get("/interviews", getInterviewStudents);
 // Get all mentor assignments
 router.get('/departments', authMiddleware, mentorController.getAllMentors);
 
@@ -19,7 +20,9 @@ router.put('/department/:department', authMiddleware, authorize('placement_cell'
 // Remove mentor assignment (only placement_cell can do this)
 router.delete('/department/:department', authMiddleware, authorize('placement_cell'), mentorController.removeMentor);
 
-// Get students in mentor's department (only mentor can see their own department)
-router.get('/students/:department', authMiddleware, authorize('mentor'), mentorController.getDepartmentStudents);
+// Get students in mentor's own department (mentor role only)
+// department is derived from token so callers cannot spoof
+router.get('/students', authMiddleware, authorize('mentor'), mentorController.getDepartmentStudents);
+router.get("/interviews", getInterviewStudents);
 
 module.exports = router;

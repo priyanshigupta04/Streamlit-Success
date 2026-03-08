@@ -1,5 +1,6 @@
 const Job = require("../models/Job");
 const Notification = require("../models/Notification");
+const Application = require("../models/Application");
 
 // POST /api/jobs — recruiter creates a job
 exports.createJob = async (req, res) => {
@@ -260,5 +261,66 @@ exports.getRecommendedJobs = async (req, res) => {
 
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+// PUT /api/jobs/:id/shortlist — recruiter shortlists students
+
+exports.shortlistStudent = async (req, res) => {
+  try {
+    const { students, status } = req.body; // frontend se array + status le
+    const jobId = req.params.id; // route me :id use kar rahe ho
+
+    const updatedApplications = [];
+
+    for (const studentId of students) {
+      const app = await Application.findOneAndUpdate(
+        { studentId, jobId },
+        { status: status }, // dynamic status
+        { new: true }
+      );
+      if (app) updatedApplications.push(app);
+    }
+
+    res.json({
+      message: "Applications updated",
+      updatedApplications
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+// PUT /api/jobs/:id/shortlist — recruiter shortlists students or updates status
+exports.updateStudentApplications = async (req, res) => {
+  try {
+    const { students, status } = req.body; // frontend se array + status le
+    const jobId = req.params.id;
+
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ message: "No students selected" });
+    }
+
+    if (!status) {
+      return res.status(400).json({ message: "Status is required" });
+    }
+
+    const updatedApplications = [];
+
+    for (const studentId of students) {
+      const app = await Application.findOneAndUpdate(
+        { studentId, jobId },
+        { status: status },
+        { new: true, upsert: false } // ensure existing application
+      );
+      if (app) updatedApplications.push(app);
+    }
+
+    res.json({
+      message: "Applications updated successfully",
+      updatedApplications
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
   }
 };
