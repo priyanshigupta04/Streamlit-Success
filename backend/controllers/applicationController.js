@@ -159,6 +159,7 @@ exports.getAllApplications = async (req, res) => {
     // For placement_cell, hod, dean: show all applications (query = {})
 
     const apps = await Application.find(query)
+  .populate('studentId', 'name email department')
   .populate('jobId', 'title company location stipend status type')
   .sort({ createdAt: -1 })
   .lean();

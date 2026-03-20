@@ -69,26 +69,13 @@ const MentorDashboard = () => {
   try {
     setInterviewError(null);
     const res = await axios.get('/api/mentors/interviews');
-    console.log('[Frontend] API Response received:', res);
-    console.log('[Frontend] res.data:', res.data);
-    console.log('[Frontend] res.data.interviews:', res.data.interviews);
-    console.log('[Frontend] Number of interviews:', res.data.interviews?.length || 0);
-    
-    if (res.data.interviews && res.data.interviews.length > 0) {
-      console.log('[Frontend] First interview:', res.data.interviews[0]);
-      console.log('[Frontend] First interview studentId:', res.data.interviews[0].studentId);
-    }
-    
     setInterviewStudents(res.data.interviews || []);
-    console.log('[Frontend] State updated with interviewStudents');
 
   } catch (err) {
     const statusCode = err.response?.status;
     const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
     const fullError = `[${statusCode || 'Error'}] ${errorMsg}`;
-    console.error("[Frontend] Failed to fetch interview students:", fullError);
-    console.error("[Frontend] Full error response:", err.response?.data);
-    console.error("[Frontend] Full error object:", err);
+    console.error('Failed to fetch interview students:', fullError);
     setInterviewError(fullError);
   }
 };
@@ -173,18 +160,11 @@ const MentorDashboard = () => {
   ];
 
   const getStudentInterviews = (studentId) => {
-    console.log(`[getStudentInterviews] Filtering for studentId: ${studentId}`);
-    console.log(`[getStudentInterviews] Total interviews in state: ${interviewStudents.length}`);
-    console.log(`[getStudentInterviews] All interviews:`, interviewStudents);
-    
     const filtered = interviewStudents.filter((app) => {
       const appStudentId = app.studentId?._id?.toString() || app.studentId?.toString();
       const matchStudentId = studentId?.toString ? studentId.toString() : studentId;
-      console.log(`[getStudentInterviews] Comparing app.studentId: ${appStudentId} vs studentId: ${matchStudentId}`);
       return appStudentId === matchStudentId;
     });
-    
-    console.log(`[getStudentInterviews] Found ${filtered.length} interviews for student ${studentId}`);
     return filtered;
   };
 

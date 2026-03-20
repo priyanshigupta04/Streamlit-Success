@@ -28,7 +28,11 @@ const RecruiterDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [scheduledInterviews, setScheduledInterviews] = useState([]);
+  const [cancelingInterviewId, setCancelingInterviewId] = useState(null);
+  const [reschedulingInterviewId, setReschedulingInterviewId] = useState(null);
+  const [selectedInterview, setSelectedInterview] = useState(null);
 
 
 const [interviewForm, setInterviewForm] = useState({
@@ -122,16 +126,11 @@ const [interviewForm, setInterviewForm] = useState({
   };
 
   const handleStatusUpdate = async (appId, newStatus) => {
-  console.log('Updating status:', { appId, newStatus });
-
   try {
-
-    const res = await axios.put(
+    await axios.put(
       `/api/applications/${appId}/status`,
       { status: newStatus }
     );
-
-    console.log("Status updated:", res.data);
 
     fetchApplicants(selectedJob._id);
 
@@ -160,6 +159,57 @@ const handleScheduleInterview = async () => {
 
   }
 };
+
+const openRescheduleModal = (interviewApplication) => {
+  setSelectedInterview(interviewApplication);
+  setInterviewForm({
+    date: interviewApplication.interview?.date
+      ? new Date(interviewApplication.interview.date).toISOString().split('T')[0]
+      : '',
+    time: interviewApplication.interview?.time || '',
+    mode: interviewApplication.interview?.mode || 'online',
+    meetingLink: interviewApplication.interview?.meetingLink || '',
+    location: interviewApplication.interview?.location || ''
+  });
+  setShowRescheduleModal(true);
+};
+
+const handleRescheduleInterview = async () => {
+  if (!selectedInterview?._id) return;
+
+  try {
+    setReschedulingInterviewId(selectedInterview._id);
+    await axios.put(`/api/applications/${selectedInterview._id}/reschedule-interview`, interviewForm);
+    alert('Interview rescheduled successfully');
+    setShowRescheduleModal(false);
+    setSelectedInterview(null);
+    fetchScheduledInterviews();
+    if (selectedJob?._id) fetchApplicants(selectedJob._id);
+  } catch (err) {
+    alert(err.response?.data?.message || 'Failed to reschedule interview');
+  } finally {
+    setReschedulingInterviewId(null);
+  }
+};
+
+const handleCancelInterview = async (applicationId) => {
+  const confirmCancel = window.confirm('Cancel this scheduled interview?');
+  if (!confirmCancel) return;
+
+  try {
+    setCancelingInterviewId(applicationId);
+    await axios.put(`/api/applications/${applicationId}/cancel-interview`);
+    alert('Interview cancelled successfully');
+    fetchScheduledInterviews();
+    if (selectedJob?._id) fetchApplicants(selectedJob._id);
+  } catch (err) {
+    const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to cancel interview';
+    alert(msg);
+  } finally {
+    setCancelingInterviewId(null);
+  }
+};
+
   const viewApplicants = (job) => {
     setSelectedJob(job);
     fetchApplicants(job._id);
@@ -276,6 +326,22 @@ const handleScheduleInterview = async () => {
                             <span className="font-medium">Location:</span> {item.interview.location}
                           </p>
                         )}
+
+                        <div className="mt-3 flex justify-end gap-2">
+                          <button
+                            onClick={() => openRescheduleModal(item)}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                          >
+                            Reschedule
+                          </button>
+                          <button
+                            onClick={() => handleCancelInterview(item._id)}
+                            disabled={cancelingInterviewId === item._id}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {cancelingInterviewId === item._id ? 'Cancelling...' : 'Cancel Interview'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -446,6 +512,15 @@ const handleScheduleInterview = async () => {
   </button>
 ))}
 
+                        {(app.status === 'interview_scheduled' || app.interviewScheduled || app.interview?.date) && (
+                          <button
+                            onClick={() => openRescheduleModal(app)}
+                            className="px-3 py-1.5 rounded-md text-xs font-medium transition bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Reschedule Interview
+                          </button>
+                        )}
+
 
                       </div>
                     </div>
@@ -517,6 +592,76 @@ const handleScheduleInterview = async () => {
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm"
         >
           Schedule Interview
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showRescheduleModal && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl border border-gray-100">
+      <h3 className="text-lg font-semibold mb-4">Reschedule Interview</h3>
+
+      <div className="space-y-3">
+        <Input
+          label="Interview Date"
+          type="date"
+          value={interviewForm.date}
+          onChange={(v)=>setInterviewForm({...interviewForm,date:v})}
+        />
+
+        <Input
+          label="Interview Time"
+          type="time"
+          value={interviewForm.time}
+          onChange={(v)=>setInterviewForm({...interviewForm,time:v})}
+        />
+
+        <Select
+          label="Mode"
+          value={interviewForm.mode}
+          onChange={(v)=>setInterviewForm({...interviewForm,mode:v})}
+          options={[
+            {v:'online',l:'Online'},
+            {v:'offline',l:'Offline'}
+          ]}
+        />
+
+        {interviewForm.mode === 'online' && (
+          <Input
+            label="Meeting Link"
+            value={interviewForm.meetingLink}
+            onChange={(v)=>setInterviewForm({...interviewForm,meetingLink:v})}
+          />
+        )}
+
+        {interviewForm.mode === 'offline' && (
+          <Input
+            label="Interview Location"
+            value={interviewForm.location}
+            onChange={(v)=>setInterviewForm({...interviewForm,location:v})}
+          />
+        )}
+      </div>
+
+      <div className="flex justify-end gap-3 mt-6">
+        <button
+          onClick={()=>{
+            setShowRescheduleModal(false);
+            setSelectedInterview(null);
+          }}
+          className="px-4 py-2 border rounded-lg text-sm"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={handleRescheduleInterview}
+          disabled={reschedulingInterviewId === selectedInterview?._id}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm disabled:opacity-60"
+        >
+          {reschedulingInterviewId === selectedInterview?._id ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
     </div>

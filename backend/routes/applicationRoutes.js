@@ -30,6 +30,140 @@ router.get("/scheduled/mine", protect, authorize("recruiter", "placement_cell"),
 router.put("/:id/mentor-approve", protect, authorize("mentor"),                      mentorApproveApplication);
 router.put("/:id/mentor-reject",  protect, authorize("mentor"),                      mentorRejectApplication);
 router.put("/:id/status",    protect, authorize("recruiter"),                        updateApplicationStatus);
+router.put("/:id/cancel-interview", protect, authorize("recruiter", "placement_cell"), async (req, res) => {
+  try {
+    const app = await Application.findById(req.params.id)
+      .populate("studentId", "_id name department")
+      .populate("jobId", "title company postedBy");
+
+    if (!app) return res.status(404).json({ message: "Application not found" });
+
+    if (app.jobId?.postedBy && req.user.role !== "placement_cell") {
+      if (app.jobId.postedBy.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+    }
+
+    const wasScheduled = app.interviewScheduled || app.interview?.date || app.status === "interview_scheduled";
+    if (!wasScheduled) {
+      return res.status(400).json({ message: "Interview is not scheduled for this application" });
+    }
+
+    await Application.updateOne(
+      { _id: app._id },
+      {
+        $set: {
+          status: "interview",
+          interviewScheduled: false,
+          interviewScheduledBy: null,
+        },
+        $unset: {
+          interview: "",
+        },
+      }
+    );
+
+    const roleText = app.jobId?.title || app.jobTitle || "the position";
+    const companyText = app.jobId?.company || app.company || "the company";
+
+    if (app.studentId?._id) {
+      await Notification.send(
+        app.studentId._id,
+        "interview_scheduled",
+        "Interview Cancelled",
+        `Your interview for ${roleText} at ${companyText} has been cancelled. Recruiter will share updated schedule if rescheduled.`,
+        "/student/dashboard"
+      );
+    }
+
+    const dept = app.studentId?.department;
+    if (dept) {
+      const mentorAssignments = await DepartmentMentor.find({ department: dept }).select("mentorId");
+      const mentorNotifications = mentorAssignments
+        .filter((assignment) => assignment.mentorId)
+        .map((assignment) =>
+          Notification.send(
+            assignment.mentorId,
+            "interview_scheduled",
+            "Student Interview Cancelled",
+            `An interview has been cancelled for a student in ${dept} (${roleText} at ${companyText}).`,
+            "/mentor/dashboard"
+          )
+        );
+      await Promise.all(mentorNotifications);
+    }
+
+    res.json({ message: "Interview cancelled successfully", application: app });
+  } catch (error) {
+    console.error('cancel-interview error:', error.message);
+    res.status(500).json({ message: "Failed to cancel interview", error: error.message });
+  }
+});
+router.put("/:id/reschedule-interview", protect, authorize("recruiter", "placement_cell"), async (req, res) => {
+  try {
+    const { date, time, mode, meetingLink, location } = req.body;
+
+    const app = await Application.findById(req.params.id)
+      .populate("studentId", "_id name department")
+      .populate("jobId", "title company postedBy");
+
+    if (!app) return res.status(404).json({ message: "Application not found" });
+
+    if (app.jobId?.postedBy && req.user.role !== "placement_cell") {
+      if (app.jobId.postedBy.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+    }
+
+    app.status = "interview_scheduled";
+    app.interviewScheduled = true;
+    app.interviewScheduledBy = req.user._id;
+    app.interview = {
+      date,
+      time,
+      mode,
+      meetingLink: meetingLink || "",
+      location: location || "",
+    };
+    await app.save();
+
+    const roleText = app.jobId?.title || app.jobTitle || "the position";
+    const companyText = app.jobId?.company || app.company || "the company";
+    const interviewMeta = [date, time, mode].filter(Boolean).join(" | ");
+
+    if (app.studentId?._id) {
+      await Notification.send(
+        app.studentId._id,
+        "interview_scheduled",
+        "Interview Rescheduled",
+        `Your interview for ${roleText} at ${companyText} has been rescheduled${interviewMeta ? ` (${interviewMeta})` : ""}.`,
+        "/student/dashboard"
+      );
+    }
+
+    const dept = app.studentId?.department;
+    if (dept) {
+      const mentorAssignments = await DepartmentMentor.find({ department: dept }).select("mentorId");
+      const mentorNotifications = mentorAssignments
+        .filter((assignment) => assignment.mentorId)
+        .map((assignment) =>
+          Notification.send(
+            assignment.mentorId,
+            "interview_scheduled",
+            "Student Interview Rescheduled",
+            `An interview has been rescheduled for a student in ${dept} (${roleText} at ${companyText})${interviewMeta ? ` (${interviewMeta})` : ""}.`,
+            "/mentor/dashboard"
+          )
+        );
+      await Promise.all(mentorNotifications);
+    }
+
+    res.json({ message: "Interview rescheduled successfully", application: app });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 router.put("/schedule-interview/:jobId", protect, authorize("recruiter", "placement_cell"), async (req, res) => {
   try {
 
