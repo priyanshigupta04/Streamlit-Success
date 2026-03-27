@@ -8,7 +8,7 @@ const ALLOWED_PROFILE_FIELDS = [
   'resumeName', 'image', 'certificates', 'phone', 'bio',
   'education', 'projects', 'certifications', 'linkedinUrl',
   'githubUrl', 'portfolioUrl', 'year', 'semester', 'companyName', 'companyIndustry',
-  'resumeUrl', 'resumeText', 'internshipReason'
+  'resumeUrl', 'resumeText', 'offerLetterUrl', 'offerLetterName', 'offerLetterHash', 'internshipReason'
 ];
 
 // GET profile

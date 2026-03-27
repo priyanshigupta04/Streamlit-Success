@@ -1,5 +1,7 @@
 const WeeklyLog = require("../models/WeeklyLog");
 const Notification = require("../models/Notification");
+const User = require("../models/User");
+const InternshipForm = require("../models/InternshipForm");
 
 // POST /api/logs — student submits a log
 exports.createLog = async (req, res) => {
@@ -7,18 +9,38 @@ exports.createLog = async (req, res) => {
     const { weekNumber, title, logText, fileUrl, hoursWorked } = req.body;
     const student = req.user;
 
+    // Resolve internal guide robustly: prefer user.guideId, fallback to latest approved internship form.
+    let resolvedGuideId = student.guideId || null;
+    if (!resolvedGuideId) {
+      const latestApprovedForm = await InternshipForm.findOne({
+        student: student._id,
+        status: 'approved',
+        internalGuide: { $ne: null },
+      })
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .select('internalGuide');
+
+      if (latestApprovedForm?.internalGuide) {
+        resolvedGuideId = latestApprovedForm.internalGuide;
+        // Keep student profile in sync so future submissions are straightforward.
+        await User.findByIdAndUpdate(student._id, { guideId: resolvedGuideId });
+      }
+    }
+
     const log = await WeeklyLog.create({
       studentId: student._id,
-      guideId: student.guideId || null,
+      guideId: resolvedGuideId || null,
       weekNumber, title, logText, fileUrl, hoursWorked,
       status: 'submitted',
     });
 
-    if (student.guideId) {
+    if (resolvedGuideId) {
       await Notification.send(
-        student.guideId, 'log_reviewed',
-        'New Weekly Log', `${student.name} submitted Week ${weekNumber} log`,
-        '/guide-dashboard'
+        resolvedGuideId,
+        'log_reviewed',
+        'New Weekly Log Submitted',
+        `${student.name} submitted Week ${weekNumber} log. Please review it in Weekly Logs section.`,
+        '/internal-guide-dashboard'
       );
     }
 

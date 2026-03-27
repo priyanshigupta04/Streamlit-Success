@@ -1,5 +1,6 @@
 const InternshipForm = require("../models/InternshipForm");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 
 // @desc    Submit internship form
 // @route   POST /api/internship-forms
@@ -30,6 +31,31 @@ const submitForm = async (req, res) => {
     });
 
     const savedForm = await newForm.save();
+
+    const studentName = req.user.name || 'A student';
+
+    if (req.user.mentorId) {
+      await Notification.send(
+        req.user.mentorId,
+        'announcement',
+        'New Internship Form Submitted',
+        `${studentName} submitted an internship form for ${companyName} (${role}). Please review it from Mentor Dashboard.`,
+        '/mentor-dashboard'
+      );
+    }
+
+    const placementUsers = await User.find({ role: 'placement_cell' }).select('_id').lean();
+    if (placementUsers.length) {
+      const placementNotifications = placementUsers.map((u) => ({
+        userId: u._id,
+        type: 'announcement',
+        title: 'New Internship Form Submitted',
+        message: `${studentName} submitted an internship form for ${companyName} (${role}).`,
+        link: '/placement-cell-dashboard'
+      }));
+      await Notification.insertMany(placementNotifications);
+    }
+
     res.status(201).json(savedForm);
   } catch (error) {
     console.error("Submit Form Error:", error);
@@ -61,7 +87,7 @@ const getForms = async (req, res) => {
           { mentor: req.user._id }
         ]
       })
-        .populate('student', 'name email branch enrollmentNo department')
+        .populate('student', 'name email branch enrollmentNo department offerLetterName offerLetterUrl offerLetterHash')
         .populate('internalGuide', 'name email');
       return res.json(forms);
     }
@@ -129,6 +155,33 @@ const approveForm = async (req, res) => {
     const updatedForm = await InternshipForm.findById(form._id)
       .populate('student', 'name email branch enrollmentNo')
       .populate('internalGuide', 'name email');
+
+    // Notify student that mentor approved form and assigned internal guide.
+    if (updatedForm?.student?._id) {
+      const guideName = updatedForm?.internalGuide?.name || 'an internal guide';
+      const guideEmail = updatedForm?.internalGuide?.email || '';
+      const guideInfo = guideEmail ? `${guideName} (${guideEmail})` : guideName;
+
+      await Notification.send(
+        updatedForm.student._id,
+        'announcement',
+        'Internal Guide Assigned',
+        `Your internship form for ${updatedForm.companyName} (${updatedForm.role}) was approved. Internal guide assigned: ${guideInfo}.`,
+        '/student-dashboard'
+      );
+    }
+
+    // Optional: also notify internal guide so both sides are informed.
+    if (updatedForm?.internalGuide?._id) {
+      const studentName = updatedForm?.student?.name || 'A student';
+      await Notification.send(
+        updatedForm.internalGuide._id,
+        'announcement',
+        'New Student Assigned',
+        `${studentName} has been assigned to you as internal-guide for internship monitoring.`,
+        '/internal-guide-dashboard'
+      );
+    }
 
     res.json(updatedForm);
   } catch (error) {

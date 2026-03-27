@@ -21,6 +21,7 @@ const MentorDashboard = () => {
   const [internshipForms, setInternshipForms] = useState([]);
   const [guides, setGuides] = useState([]);
   const [selectedGuide, setSelectedGuide] = useState({});
+  const [interviewError, setInterviewError] = useState(null);
 
   useEffect(() => {
     fetchPendingDocs();
@@ -34,6 +35,7 @@ const MentorDashboard = () => {
   const fetchInternshipForms = async () => {
     try {
       const res = await axios.get('/api/internship-forms');
+      console.log('📋 Internship Forms Response:', res.data);
       setInternshipForms(res.data);
     } catch (err) {
       console.error('Failed to fetch internship forms', err);
@@ -66,14 +68,16 @@ const MentorDashboard = () => {
   };
   const fetchInterviewStudents = async () => {
   try {
-
-    const res = await axios.get("/api/mentors/interview-students");
-setInterviewStudents(res.data.interviews || []);
-
+    setInterviewError(null);
+    const res = await axios.get('/api/mentors/interviews');
     setInterviewStudents(res.data.interviews || []);
 
   } catch (err) {
-    console.error("Failed to fetch interview students", err);
+    const statusCode = err.response?.status;
+    const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
+    const fullError = `[${statusCode || 'Error'}] ${errorMsg}`;
+    console.error('Failed to fetch interview students:', fullError);
+    setInterviewError(fullError);
   }
 };
 
@@ -101,9 +105,37 @@ setInterviewStudents(res.data.interviews || []);
   const fetchStudents = async () => {
     try {
       const res = await axios.get('/api/mentors/students');
+      console.log('👥 Students Response:', res.data);
       setStudents(res.data.students || []);
     } catch (err) {
       console.error('Failed to fetch students', err);
+    }
+  };
+
+  const handleViewOfferLetter = async (studentId, fileName = 'offer-letter.pdf') => {
+    try {
+      const response = await axios.get(`/api/upload/offer-letter/view/${studentId}`, {
+        responseType: 'blob',
+      });
+
+      const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+      const blobUrl = window.URL.createObjectURL(pdfBlob);
+      const opened = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+
+      // Fallback if popup is blocked by browser
+      if (!opened) {
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName || 'offer-letter.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      console.error('Failed to open offer letter', err);
+      alert(err.response?.data?.message || 'Failed to open offer letter');
     }
   };
 
@@ -155,6 +187,20 @@ setInterviewStudents(res.data.interviews || []);
     { key: 'documents', label: 'Document Approvals', icon: FileCheck },
     { key: 'students', label: 'My Students', icon: Users },
   ];
+
+  const getStudentInterviews = (studentId) => {
+    const filtered = interviewStudents.filter((app) => {
+      const appStudentId = app.studentId?._id?.toString() || app.studentId?.toString();
+      const matchStudentId = studentId?.toString ? studentId.toString() : studentId;
+      return appStudentId === matchStudentId;
+    });
+    return filtered;
+  };
+
+  const formatInterviewDate = (dateValue) => {
+    if (!dateValue) return 'Date not set';
+    return new Date(dateValue).toLocaleDateString();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -261,7 +307,15 @@ setInterviewStudents(res.data.interviews || []);
           {/* INTERNSHIP FORMS APPROVALS */}
           {activeTab === 'internship_forms' && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">Internship Forms</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Internship Forms</h2>
+                <button
+                  onClick={() => fetchInternshipForms()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                >
+                  🔄 Refresh Forms
+                </button>
+              </div>
               {internshipForms.length === 0 ? (
                 <div className="bg-white rounded-xl shadow-sm p-12 text-center">
                   <FileSignature size={48} className="mx-auto mb-4 text-gray-300" />
@@ -276,26 +330,46 @@ setInterviewStudents(res.data.interviews || []);
                           <h3 className="font-bold text-lg text-gray-900">{form.student?.name} <span className="text-sm font-normal text-gray-500">({form.student?.branch})</span></h3>
                           <p className="text-sm text-gray-600 mt-1"><span className="font-semibold">{form.companyName}</span> • {form.role}</p>
                           <p className="text-xs text-gray-500 mt-1">Stipend: {form.stipend} | Duration: {form.internshipPeriod} | Joining: {new Date(form.joiningDate).toLocaleDateString()}</p>
+                          <div className="mt-2">
+                            {form.student?.offerLetterUrl ? (
+                              <div className="flex flex-col gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewOfferLetter(form.student?._id, form.student?.offerLetterName)}
+                                  className="text-left text-xs font-semibold text-indigo-600 underline"
+                                >
+                                  View Offer Letter
+                                </button>
+                                {form.student?.offerLetterHash && (
+                                  <span className="text-xs text-gray-500 font-mono">
+                                    Verify Hash: {form.student.offerLetterHash.substring(0, 8).toUpperCase()}...
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-amber-600 font-medium">Offer letter not uploaded yet</p>
+                            )}
+                          </div>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${form.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                           {form.status}
                         </span>
                       </div>
-                      
+
                       {form.extraDetails && (
-                         <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg mb-4">
-                           <span className="font-semibold">Extra Details:</span> {form.extraDetails}
-                         </div>
+                        <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg mb-4">
+                          <span className="font-semibold">Extra Details:</span> {form.extraDetails}
+                        </div>
                       )}
 
                       {form.status === 'pending' ? (
                         <div className="flex items-center gap-4 mt-4 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
                           <div className="flex-1">
                             <label className="block text-xs font-semibold text-indigo-900 uppercase tracking-widest mb-2">Assign Internal Guide</label>
-                            <select 
+                            <select
                               className="w-full border-gray-300 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white"
                               value={selectedGuide[form._id] || ''}
-                              onChange={(e) => setSelectedGuide({...selectedGuide, [form._id]: e.target.value})}
+                              onChange={(e) => setSelectedGuide({ ...selectedGuide, [form._id]: e.target.value })}
                             >
                               <option value="">-- Select Guide --</option>
                               {guides.map(g => (
@@ -303,7 +377,7 @@ setInterviewStudents(res.data.interviews || []);
                               ))}
                             </select>
                           </div>
-                          <button 
+                          <button
                             onClick={() => handleApproveInternship(form._id)}
                             className="bg-indigo-600 text-white px-6 py-2.5 flexitems-center justify-center rounded-lg text-sm font-bold tracking-wide hover:bg-indigo-700 transition-colors mt-6 whitespace-nowrap"
                           >
@@ -420,83 +494,118 @@ setInterviewStudents(res.data.interviews || []);
           {/* STUDENTS TAB */}
           {activeTab === 'students' && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">My Students</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">My Students</h2>
+                <button
+                  onClick={() => { fetchStudents(); fetchInterviewStudents(); }}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                >
+                  🔄 Refresh Students
+                </button>
+              </div>
               {students.length === 0 ? (
                 <p className="text-gray-500">No students registered in your department yet.</p>
               ) : (
                 <div className="space-y-4">
+                  {interviewError && (
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-lg mb-4">
+                      <p className="text-sm text-red-800">
+                        <strong>Error loading interviews:</strong> {interviewError}
+                      </p>
+                      <p className="text-xs text-red-700 mt-2">
+                        Check browser console (F12) for details. Verify your mentor account has department assigned.
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Total Students:</strong> {students.length} | <strong>Scheduled Interviews:</strong> {interviewStudents.length}
+                    </p>
+                  </div>
 
-{/* NORMAL STUDENTS */}
+                  <h3 className="font-semibold text-gray-700">Department Students</h3>
+                  <p className="text-xs text-gray-400 mb-2">Showing {students.length} students - Scheduled interviews: {interviewStudents.length}</p>
 
-<h3 className="font-semibold text-gray-700">Department Students</h3>
+                  {students.map((s) => {
+                    const studentInterviews = getStudentInterviews(s._id);
 
-{students.map(s => (
-  <div key={s._id} className="p-4 bg-white rounded-lg shadow-sm">
-    <p className="font-medium text-gray-800">{s.name}</p>
-    <p className="text-sm text-gray-500">{s.email}</p>
-  </div>
-))}
+                    return (
+                      <div key={s._id} className="p-4 bg-white rounded-lg shadow-sm">
+                        <p className="font-medium text-gray-800">{s.name}</p>
+                        <p className="text-sm text-gray-500">{s.email}</p>
 
+                        <div className="mt-2">
+                          {s.offerLetterUrl ? (
+                            <div className="flex flex-col gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleViewOfferLetter(s._id, s.offerLetterName)}
+                                className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-600 underline text-left"
+                              >
+                                <FileText size={12} /> View Offer Letter
+                              </button>
+                              {s.offerLetterHash && (
+                                <span className="text-xs text-gray-500 font-mono">
+                                  Verify Hash: {s.offerLetterHash.substring(0, 8).toUpperCase()}...
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-amber-600 font-medium">Offer letter not uploaded yet</p>
+                          )}
+                        </div>
 
-{/* INTERVIEW STUDENTS */}
+                        {studentInterviews.length > 0 ? (
+                          <div className="mt-4 border-t pt-3 space-y-3">
+                            <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">
+                              Scheduled Interviews ({studentInterviews.length})
+                            </p>
 
-<h3 className="font-semibold text-gray-700 mt-6">
-Students Selected for Interview
-</h3>
+                            {studentInterviews.map((app) => (
+                              <div key={app._id} className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+                                <p>
+                                  <span className="font-semibold">Company:</span> {app.jobId?.company || 'N/A'}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Role:</span> {app.jobId?.title || 'N/A'}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Date:</span> {formatInterviewDate(app.interview?.date)}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Time:</span> {app.interview?.time || 'Time not set'}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Mode:</span> {app.interview?.mode || 'Mode not set'}
+                                </p>
 
-{interviewStudents.length === 0 ? (
-  <p className="text-gray-500">No interviews scheduled yet.</p>
-) : (
-  interviewStudents.map(app => (
+                                {app.interview?.mode === 'online' && app.interview?.meetingLink && (
+                                  <a
+                                    href={app.interview.meetingLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-indigo-600 underline"
+                                  >
+                                    Join Meeting
+                                  </a>
+                                )}
 
-    <div key={app._id} className="bg-white p-5 rounded-xl shadow">
-
-      <h4 className="font-semibold text-gray-800">
-        {app.studentId?.name}
-      </h4>
-
-      <p className="text-sm text-gray-500">
-        {app.studentId?.email}
-      </p>
-
-      <div className="mt-3 text-sm text-gray-700">
-
-        <p>
-          <b>Job:</b> {app.jobId?.title}
-        </p>
-
-        <p>
-          <b>Company:</b> {app.jobId?.company}
-        </p>
-
-        <p>
-          <b>Interview Date:</b>{" "}
-          {new Date(app.interview?.date).toLocaleDateString()}
-        </p>
-
-        <p>
-          <b>Time:</b> {app.interview?.time}
-        </p>
-
-        {app.interview?.meetingLink && (
-          <a
-            href={app.interview.meetingLink}
-            target="_blank"
-            rel="noreferrer"
-            className="text-indigo-600 underline"
-          >
-            Join Meeting
-          </a>
-        )}
-
-      </div>
-
-    </div>
-
-  ))
-)}
-
-</div>
+                                {app.interview?.mode === 'offline' && app.interview?.location && (
+                                  <p>
+                                    <span className="font-semibold">Location:</span> {app.interview.location}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-2">No scheduled interviews</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}

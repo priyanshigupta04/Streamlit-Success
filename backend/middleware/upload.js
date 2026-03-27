@@ -22,7 +22,18 @@ const resumeStorage = new CloudinaryStorage({
   },
 });
 
+// --- Offer Letter PDF Storage ---
+const offerLetterStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'skillsync/offer-letters',
+    allowed_formats: ['pdf'],
+    resource_type: 'raw',
+  },
+});
+
 const uploadImage  = multer({ storage: imageStorage,  limits: { fileSize: 5 * 1024 * 1024 } });
 const uploadResume = multer({ storage: resumeStorage, limits: { fileSize: 10 * 1024 * 1024 } });
+const uploadOfferLetter = multer({ storage: offerLetterStorage, limits: { fileSize: 10 * 1024 * 1024 } });
 
-module.exports = { uploadImage, uploadResume };
+module.exports = { uploadImage, uploadResume, uploadOfferLetter };

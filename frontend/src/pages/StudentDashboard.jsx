@@ -100,6 +100,8 @@ const StudentDashboard = () => {
     skills: '',
     resumeName: '',
     resumeUrl: '',
+    offerLetterName: '',
+    offerLetterUrl: '',
     internshipReason: '',
     image: null,
   certificates: [{ org: '', file: null }],
@@ -124,6 +126,8 @@ const StudentDashboard = () => {
     skills: Array.isArray(data.skills) ? data.skills.join(', ') : (data.skills || ''),
     resumeName: data.resumeName || '',
     resumeUrl: data.resumeUrl || '',
+    offerLetterName: data.offerLetterName || '',
+    offerLetterUrl: data.offerLetterUrl || '',
     internshipReason: data.internshipReason || '',
     image: data.image || null,
     certificates: data.certificates && data.certificates.length ? data.certificates : [{ org: '', file: null }]
@@ -146,6 +150,7 @@ const StudentDashboard = () => {
     };
 
     fetchProfile();
+    fetchInternshipForms();
     fetchApplications();
     fetchJobs();
   }, []);
@@ -189,7 +194,8 @@ const StudentDashboard = () => {
   date: a.interview.date,
   time: a.interview.time,
   mode: a.interview.mode,
-  meetingLink: a.interview.meetingLink
+  meetingLink: a.interview.meetingLink,
+  location: a.interview.location
 } : null,   // ⭐ ADD THIS
   date: new Date(a.createdAt).toLocaleDateString(),
 }));
@@ -214,8 +220,8 @@ const StudentDashboard = () => {
   };
 
   // ── Upload State ──────────────────────────────────────────────────────
-  const [uploading, setUploading] = useState({ image: false, resume: false });
-  const [uploadProgress, setUploadProgress] = useState({ image: 0, resume: 0 });
+  const [uploading, setUploading] = useState({ image: false, resume: false, offerLetter: false });
+  const [uploadProgress, setUploadProgress] = useState({ image: 0, resume: 0, offerLetter: 0 });
   const [aiAnalysis, setAiAnalysis] = useState(null);
 
   // ── Upload Handlers ────────────────────────────────────────────────────
@@ -310,14 +316,72 @@ const StudentDashboard = () => {
     }
   };
 
+  const handleOfferLetterUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // basic client‑side validation
+    if (file.type !== 'application/pdf') {
+      alert('Please select a PDF file');
+      return;
+    }
+    const MAX = 10 * 1024 * 1024; // match server limit
+    if (file.size > MAX) {
+      alert('Offer Letter must be smaller than 10 MB');
+      return;
+    }
+
+    try {
+      setUploading(prev => ({ ...prev, offerLetter: true }));
+      setUploadProgress(prev => ({ ...prev, offerLetter: 0 }));
+      const fd = new FormData();
+      fd.append('offerLetter', file);
+      const res = await axios.post('/api/upload/offer-letter', fd, {
+        onUploadProgress: (evt) => {
+          const pct = Math.round((evt.loaded * 100) / (evt.total || 1));
+          setUploadProgress(prev => ({ ...prev, offerLetter: pct }));
+        },
+      });
+      const { offerLetterUrl, offerLetterName } = res.data;
+      setProfile(prev => ({
+        ...prev,
+        offerLetterName: offerLetterName || file.name,
+        offerLetterUrl: offerLetterUrl || '',
+      }));
+      alert('✅ Offer Letter uploaded successfully! Your Mentor and Placement Cell will be notified.');
+    } catch (err) {
+      console.error('Offer Letter upload failed', err);
+      let msg = err.message;
+      if (err.response) {
+        console.error('server response', err.response.data);
+        const data = err.response.data;
+        if (data) {
+          msg = data.message || JSON.stringify(data);
+        }
+      }
+      alert('Offer Letter upload failed: ' + msg);
+    } finally {
+      setUploading(prev => ({ ...prev, offerLetter: false }));
+      setUploadProgress(prev => ({ ...prev, offerLetter: 0 }));
+    }
+  };
+
   // 2. WEEKLY LOGS STATE
   const [logs, setLogs] = useState([]);
   const [logInput, setLogInput] = useState({ week: '', hours: '', tasks: '' });
   const [activeDocType, setActiveDocType] = useState(null); 
 // const [docFormData, setDocFormData] = useState({});
 
+  const hasInternshipFormSubmitted = submittedForms.length > 0;
+
 
   const handleLogSubmit = () => {
+    if (!hasInternshipFormSubmitted) {
+      alert("Please submit Internship Form first. Then you can add Weekly Logs.");
+      setActiveTab('internship_form');
+      return;
+    }
+
     if (!logInput.week || !logInput.tasks) {
       alert("Please fill in the Week and Tasks.");
       return;
@@ -333,6 +397,13 @@ const StudentDashboard = () => {
   };
   //NOC
   const handleSubmit = async () => {
+  if (!(profile.offerLetterUrl || profile.offerLetterName)) {
+    alert('Offer Letter is mandatory before requesting any document.');
+    setActiveDocType(null);
+    setShowModal(true);
+    return;
+  }
+
   const { orgName, role, mode, startDate, duration, applyingFor, targetUni, faculty, achievements, bonafidePurpose } = docFormData;
 
   // 1. NOC Validation
@@ -374,7 +445,8 @@ const StudentDashboard = () => {
         companyName: '', role: '', stipend: '', companyAddress: '',
         joiningDate: '', internshipPeriod: '', extraDetails: ''
       });
-      fetchInternshipForms();
+      await fetchInternshipForms();
+      setActiveTab('logs');
     } catch (err) {
        alert("Failed to submit form: " + (err.response?.data?.message || err.message));
     }
@@ -451,8 +523,13 @@ const StudentDashboard = () => {
   const scheduledInterview = myApplications.find(
   app =>
     ["interview_scheduled", "interview"].includes(app.status) &&
-    app.interview
+    app.interview?.date
 );
+
+  const formatInterviewDate = (dateValue) => {
+    if (!dateValue) return 'Date not set';
+    return new Date(dateValue).toLocaleDateString();
+  };
   const [jobs, setJobs] = useState([]);
   // IDs of jobs the student has already applied to
   const appliedJobIds = new Set(
@@ -534,6 +611,19 @@ const getProfileStatus = () => {
 };
 
 const status = getProfileStatus();
+const hasOfferLetterUploaded = Boolean(profile.offerLetterUrl || profile.offerLetterName);
+const latestGuideAssignedForm = submittedForms
+  .filter((form) => form.status === 'approved' && form.internalGuide)
+  .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0];
+
+const handleOpenDocRequest = (docType) => {
+  if (!hasOfferLetterUploaded) {
+    alert('Please upload your Offer Letter first. Only then you can request documents.');
+    setShowModal(true);
+    return;
+  }
+  setActiveDocType(docType);
+};
 // --------------------------
 
   return (
@@ -550,6 +640,26 @@ const status = getProfileStatus();
       />
 
       <main className="max-w-[1400px] mx-auto p-10">
+        {latestGuideAssignedForm && (
+          <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-xl mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-emerald-700 uppercase">Internal Guide Assigned</p>
+              <p className="text-sm text-emerald-900 font-semibold mt-1">
+                {latestGuideAssignedForm.internalGuide?.name}
+                {latestGuideAssignedForm.internalGuide?.email ? ` (${latestGuideAssignedForm.internalGuide.email})` : ''}
+              </p>
+              <p className="text-xs text-emerald-700 mt-1">
+                For internship at {latestGuideAssignedForm.companyName} ({latestGuideAssignedForm.role})
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab('internship_form')}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-emerald-700 transition-colors"
+            >
+              View Details
+            </button>
+          </div>
+        )}
         {scheduledInterview && (
   <div className="bg-indigo-50 border border-indigo-200 p-5 rounded-xl mb-6 flex justify-between items-center">
     
@@ -563,8 +673,14 @@ const status = getProfileStatus();
       </p>
 
       <p className="text-sm text-gray-600">
-        {scheduledInterview.interview.date} • {scheduledInterview.interview.time}
+        {formatInterviewDate(scheduledInterview.interview.date)} • {scheduledInterview.interview.time || 'Time not set'} • {scheduledInterview.interview.mode || 'Mode not set'}
       </p>
+
+      {scheduledInterview.interview.mode === 'offline' && scheduledInterview.interview.location && (
+        <p className="text-sm text-gray-600">
+          Location: {scheduledInterview.interview.location}
+        </p>
+      )}
     </div>
 
     {scheduledInterview.interview.meetingLink && (
@@ -685,7 +801,7 @@ const status = getProfileStatus();
         </p>
 
         <p className="text-sm">
-          Date: {new Date(app.interview.date).toLocaleDateString()}
+          Date: {formatInterviewDate(app.interview.date)}
         </p>
 
         <p className="text-sm">
@@ -695,6 +811,12 @@ const status = getProfileStatus();
         <p className="text-sm">
           Mode: {app.interview.mode}
         </p>
+
+        {app.interview.mode === 'offline' && app.interview.location && (
+          <p className="text-sm">
+            Location: {app.interview.location}
+          </p>
+        )}
 
         {app.interview.meetingLink && (
           <a
@@ -720,16 +842,24 @@ const status = getProfileStatus();
       {/* TAB 3: LOGS */}
       {activeTab === 'logs' && (
         <div className="space-y-10 fade-in">
+          {!hasInternshipFormSubmitted && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+              <p className="text-sm font-bold text-amber-700">
+                Weekly logs can be added only after Internship Form submission.
+              </p>
+            </div>
+          )}
+
           <div className="bg-black text-white p-12 rounded-[3rem] shadow-2xl relative overflow-hidden">
             <h3 className="text-3xl font-black italic tracking-tighter uppercase mb-2">Progress Reporting</h3>
             <div className="space-y-6 max-w-2xl mt-10">
               <div className="grid grid-cols-2 gap-4">
-                <input type="number" placeholder="Week" className="w-full p-4 bg-white/10 rounded-2xl outline-none" value={logInput.week} onChange={(e) => setLogInput({...logInput, week: e.target.value})}/>
-                <input type="number" placeholder="Hours" className="w-full p-4 bg-white/10 rounded-2xl outline-none" value={logInput.hours} onChange={(e) => setLogInput({...logInput, hours: e.target.value})}/>
+                <input type="number" placeholder="Week" className="w-full p-4 bg-white/10 rounded-2xl outline-none disabled:opacity-50 disabled:cursor-not-allowed" value={logInput.week} onChange={(e) => setLogInput({...logInput, week: e.target.value})} disabled={!hasInternshipFormSubmitted}/>
+                <input type="number" placeholder="Hours" className="w-full p-4 bg-white/10 rounded-2xl outline-none disabled:opacity-50 disabled:cursor-not-allowed" value={logInput.hours} onChange={(e) => setLogInput({...logInput, hours: e.target.value})} disabled={!hasInternshipFormSubmitted}/>
               </div>
-              <textarea className="w-full p-4 bg-white/10 rounded-2xl outline-none h-32" placeholder="Tasks achieved..." value={logInput.tasks} onChange={(e) => setLogInput({...logInput, tasks: e.target.value})}></textarea>
-              <button onClick={handleLogSubmit} className="bg-white text-black px-10 py-5 rounded-2xl font-black uppercase text-[11px] flex items-center gap-3">
-                <Send size={16}/> Submit Log
+              <textarea className="w-full p-4 bg-white/10 rounded-2xl outline-none h-32 disabled:opacity-50 disabled:cursor-not-allowed" placeholder="Tasks achieved..." value={logInput.tasks} onChange={(e) => setLogInput({...logInput, tasks: e.target.value})} disabled={!hasInternshipFormSubmitted}></textarea>
+              <button onClick={handleLogSubmit} disabled={!hasInternshipFormSubmitted} className={`px-10 py-5 rounded-2xl font-black uppercase text-[11px] flex items-center gap-3 ${hasInternshipFormSubmitted ? 'bg-white text-black' : 'bg-slate-300 text-slate-600 cursor-not-allowed'}`}>
+                <Send size={16}/> {hasInternshipFormSubmitted ? 'Submit Log' : 'Submit Internship Form First'}
               </button>
             </div>
           </div>
@@ -761,12 +891,24 @@ const status = getProfileStatus();
                   <FileText size={24}/>
                 </div>
                 <h4 className="font-black text-lg mb-1 italic uppercase">{doc}</h4>
-                <button onClick={() => setActiveDocType(doc)} className="w-full py-4 bg-black text-white rounded-2xl text-[10px] font-black uppercase mt-4">
-                  Request Now
+                <button
+                  onClick={() => handleOpenDocRequest(doc)}
+                  disabled={!hasOfferLetterUploaded}
+                  className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase mt-4 transition-all ${hasOfferLetterUploaded ? 'bg-black text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
+                >
+                  {hasOfferLetterUploaded ? 'Request Now' : 'Upload Offer Letter First'}
                 </button>
               </div>
             ))}
           </div>
+
+          {!hasOfferLetterUploaded && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+              <p className="text-xs font-bold text-amber-700">
+                Upload your Offer Letter from profile section before requesting NOC, LOR, or Bonafide.
+              </p>
+            </div>
+          )}
 
           {/* Request Tracking */}
           <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
@@ -1183,6 +1325,66 @@ const status = getProfileStatus();
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+            </section>
+
+            {/* SECTION 3.5: OFFER LETTER UPLOAD */}
+            <section className="space-y-6">
+              <div className="bg-gradient-to-br from-emerald-50 to-blue-50 border border-emerald-200 p-8 rounded-[2.5rem]">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center">
+                    <FileText size={20}/>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black uppercase italic tracking-widest">Offer Letter Upload</h4>
+                    <p className="text-[8px] text-slate-500 font-bold mt-1">📤 Share with Mentor & Placement Cell</p>
+                  </div>
+                </div>
+                
+                <label className={`flex flex-col items-center justify-center w-full h-[160px] border-2 border-dashed rounded-[2rem] cursor-pointer group transition-all ${uploading.offerLetter ? 'border-emerald-500 bg-emerald-100/50' : profile.offerLetterName ? 'border-emerald-400 bg-emerald-50' : 'border-emerald-200 bg-white hover:bg-emerald-50/50'}`}>
+                  {uploading.offerLetter ? (
+                    <div className="flex flex-col items-center gap-3 w-full px-6">
+                      <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-[9px] font-black text-emerald-600 uppercase">Uploading Offer Letter…</p>
+                      <div className="w-full h-2 bg-emerald-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-600 transition-all duration-300 rounded-full" style={{ width: `${uploadProgress.offerLetter}%` }}></div>
+                      </div>
+                      <p className="text-[9px] font-black text-emerald-600">{uploadProgress.offerLetter}%</p>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className={`w-6 h-6 mb-2 transition-colors ${profile.offerLetterName ? 'text-emerald-600' : 'text-emerald-400 group-hover:text-emerald-600'}`} />
+                      <p className="text-[9px] font-black text-emerald-700 uppercase px-4 text-center">{profile.offerLetterName || 'Upload Your Offer Letter (PDF)'}</p>
+                      {profile.offerLetterName && <p className="text-[8px] text-emerald-600 font-bold mt-1">✓ Ready to Share</p>}
+                    </>
+                  )}
+                  <input type="file" className="hidden" accept=".pdf" onChange={handleOfferLetterUpload} disabled={uploading.offerLetter}/>
+                </label>
+
+                {profile.offerLetterUrl && !uploading.offerLetter && (
+                  <div className="flex gap-3 mt-4">
+                    <a
+                      href={profile.offerLetterUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all"
+                    >
+                      <FileText size={12}/> View Offer Letter
+                    </a>
+                    <button 
+                      onClick={() => setProfile({...profile, offerLetterName: '', offerLetterUrl: ''})}
+                      className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[8px] font-black uppercase hover:bg-red-100 transition-all"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+                
+                <div className="mt-4 p-3 bg-white/60 rounded-lg border border-emerald-100">
+                  <p className="text-[8px] text-slate-600 font-bold">
+                    💡 <strong>Note:</strong> Your Mentor and Placement Cell will be notified once you upload your offer letter. This helps track placements and provides documentation for your internship.
+                  </p>
                 </div>
               </div>
             </section>

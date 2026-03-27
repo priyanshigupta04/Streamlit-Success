@@ -8,6 +8,7 @@ const {
 
 router.post("/",              protect, authorize("student"), createLog);
 router.get("/mine",           protect, authorize("student"), getMyLogs);
+router.get("/students",       protect, authorize("internal_guide"), getStudentLogs);
 router.get("/student/:studentId", protect, authorize("internal_guide"), getStudentLogs);
 router.put("/:id/review",    protect, authorize("internal_guide"), reviewLog);
 

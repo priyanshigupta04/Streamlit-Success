@@ -4,7 +4,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 const authorize = require('../middleware/authorize');
 const mentorController = require('../controllers/mentorController');
 const { getInterviewStudents } = require("../controllers/mentorController");
-router.get("/interviews", getInterviewStudents);
 // Get all mentor assignments
 router.get('/departments', authMiddleware, mentorController.getAllMentors);
 
@@ -23,6 +22,6 @@ router.delete('/department/:department', authMiddleware, authorize('placement_ce
 // Get students in mentor's own department (mentor role only)
 // department is derived from token so callers cannot spoof
 router.get('/students', authMiddleware, authorize('mentor'), mentorController.getDepartmentStudents);
-router.get("/interviews", getInterviewStudents);
+router.get('/interviews', authMiddleware, authorize('mentor'), getInterviewStudents);
 
 module.exports = router;

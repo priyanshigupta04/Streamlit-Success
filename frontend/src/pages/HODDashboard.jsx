@@ -11,11 +11,13 @@ const HODDashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pendingDocs, setPendingDocs] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
 
   useEffect(() => {
     fetchPendingDocs();
+    fetchApplications();
   }, []);
 
   const fetchPendingDocs = async () => {
@@ -27,6 +29,15 @@ const HODDashboard = () => {
       console.error('Failed to fetch documents', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchApplications = async () => {
+    try {
+      const res = await axios.get('/api/applications/all');
+      setApplications(res.data.applications || []);
+    } catch (err) {
+      console.error('Failed to fetch applications', err);
     }
   };
 
@@ -48,6 +59,22 @@ const HODDashboard = () => {
     { key: 'approvals', label: 'Approvals', icon: FileCheck },
     { key: 'department', label: 'Department', icon: Building },
   ];
+
+  const selectedApplications = applications.filter(
+    (app) => app.status === 'selected' || app.status === 'offered'
+  );
+
+  const scheduledInterviews = applications.filter(
+    (app) =>
+      app.status === 'interview_scheduled' ||
+      app.interviewScheduled ||
+      app.interview?.date
+  );
+
+  const formatInterviewDate = (dateValue) => {
+    if (!dateValue) return 'Date not set';
+    return new Date(dateValue).toLocaleDateString();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,10 +103,11 @@ const HODDashboard = () => {
           {activeTab === 'dashboard' && (
             <div>
               <h2 className="text-2xl font-bold text-gray-800 mb-6">HOD Dashboard</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <StatCard icon={FileCheck} label="Pending Approvals" value={pendingDocs.length} color="bg-yellow-500" />
-                <StatCard icon={CheckCircle2} label="Approved Today" value="-" color="bg-green-500" />
-                <StatCard icon={BarChart3} label="Department Stats" value="-" color="bg-blue-500" />
+                <StatCard icon={Users} label="Selected Students" value={selectedApplications.length} color="bg-green-500" />
+                <StatCard icon={Clock} label="Scheduled Interviews" value={scheduledInterviews.length} color="bg-indigo-500" />
+                <StatCard icon={BarChart3} label="Total Applications" value={applications.length} color="bg-blue-500" />
               </div>
 
               {pendingDocs.length > 0 && (
@@ -98,6 +126,42 @@ const HODDashboard = () => {
                       <button onClick={() => setActiveTab('approvals')} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
                         Review <ArrowRight size={14} className="inline" />
                       </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {scheduledInterviews.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
+                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Clock size={18} className="text-indigo-500" /> Scheduled Interviews
+                  </h3>
+                  {scheduledInterviews.slice(0, 6).map(app => (
+                    <div key={app._id} className="py-3 border-b last:border-0">
+                      <p className="font-medium text-gray-800">{app.studentId?.name || 'Student'}</p>
+                      <p className="text-sm text-gray-500">
+                        {app.jobId?.title || app.jobTitle || 'Role'} • {app.jobId?.company || app.company || 'Company'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatInterviewDate(app.interview?.date)} • {app.interview?.time || 'Time not set'} • {app.interview?.mode || 'Mode not set'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedApplications.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
+                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <CheckCircle2 size={18} className="text-green-500" /> Selected Students
+                  </h3>
+                  {selectedApplications.slice(0, 6).map(app => (
+                    <div key={app._id} className="py-3 border-b last:border-0">
+                      <p className="font-medium text-gray-800">{app.studentId?.name || 'Student'}</p>
+                      <p className="text-sm text-gray-500">{app.studentId?.email || 'No email'}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {app.jobId?.title || app.jobTitle || 'Role'} • {app.jobId?.company || app.company || 'Company'}
+                      </p>
                     </div>
                   ))}
                 </div>

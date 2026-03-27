@@ -181,9 +181,9 @@ exports.getDepartmentStudents = async (req, res) => {
       return res.status(403).json({ message: 'You are not assigned to this department' });
     }
 
-    // Fetch all students from this department
+    // Fetch all students from this department including offer-letter fields for mentor visibility
     const students = await User.find({ department, role: 'student' })
-      .select('name email profile createdAt');
+      .select('name email profile createdAt offerLetterName offerLetterUrl offerLetterHash branch enrollmentNo department');
 
     res.json({ department, students });
   } catch (err) {
@@ -194,24 +194,50 @@ exports.getDepartmentStudents = async (req, res) => {
 
 exports.getInterviewStudents = async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication failed' });
+    }
+
     const mentorId = req.user._id;
+    let department = req.user.department;
 
-    // 1️⃣ Find students assigned to this mentor
-    const students = await User.find({ mentorId, role: 'student' }).select('_id name email');
-    const studentIds = students.map(s => s._id);
+    if (!department) {
+      const mentorAssignment = await DepartmentMentor.findOne({ mentorId });
+      
+      if (!mentorAssignment) {
+        return res.status(403).json({ message: 'Mentor not assigned to any department' });
+      }
+      
+      department = mentorAssignment.department;
+    }
 
-    // 2️⃣ Fetch only scheduled interviews for these students
-    const interviews = await Application.find({
+    const students = await User.find({ department, role: 'student' }).select('_id name email');
+    
+    const studentIds = students.map((s) => s._id);
+
+    if (!studentIds.length) {
+      return res.json({ interviews: [], department });
+    }
+
+    const queryFilter = {
       studentId: { $in: studentIds },
-      interviewScheduled: true
-    })
-    .populate('studentId', 'name email')
-    .populate('jobId', 'title company location')
-    .lean();
+      $or: [
+        { interviewScheduled: true },
+        { 'interview.date': { $exists: true, $ne: null } },
+      ],
+    };
 
-    res.json({ interviews });
+    const populatedInterviews = await Application.find(queryFilter)
+      .populate('studentId', 'name email department')
+      .populate('jobId', 'title company location')
+      .sort({ 'interview.date': 1, 'interview.time': 1, createdAt: -1 })
+      .lean();
+    
+    res.json({ interviews: populatedInterviews, department });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Failed to fetch scheduled interviews' });
+    res.status(500).json({ 
+      message: 'Failed to fetch scheduled interviews', 
+      error: err.message
+    });
   }
 };

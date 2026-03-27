@@ -15,6 +15,10 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       req.user = await User.findById(decoded.id).select("-password");
+      if (!req.user) {
+        return res.status(401).json({ message: "Not authorized" });
+      }
+
       // mentors must be assigned to a department or they cannot use protected areas
       if (req.user.role === 'mentor') {
         const assignment = await DepartmentMentor.findOne({ mentorId: req.user._id });

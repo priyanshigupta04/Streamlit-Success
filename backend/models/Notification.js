@@ -15,7 +15,15 @@ const notificationSchema = new mongoose.Schema({
 notificationSchema.index({ userId: 1, read: 1 });
 
 notificationSchema.statics.send = async function(userId, type, title, message, link) {
-  return this.create({ userId, type, title, message, link });
+  console.log('📧 [NOTIFICATION.SEND] Called with:', { userId, type, title, messageLength: message.length });
+  try {
+    const result = await this.create({ userId, type, title, message, link });
+    console.log('📧 [NOTIFICATION.SEND] Created successfully:', { id: result._id, userId: result.userId });
+    return result;
+  } catch (err) {
+    console.error('❌ [NOTIFICATION.SEND] Failed:', { error: err.message, stack: err.stack });
+    throw err;
+  }
 };
 
 module.exports = mongoose.model("Notification", notificationSchema);

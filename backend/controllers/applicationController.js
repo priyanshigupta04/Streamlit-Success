@@ -73,7 +73,7 @@ exports.getMyApplications = async (req, res) => {
 
     const applications = apps.map(app => ({
       ...app,
-      interview: app.interviewDetails || null
+      interview: app.interview || null
     }));
 
     res.json({ applications });
@@ -99,6 +99,34 @@ exports.getApplicants = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json({ applicants: apps });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET /api/applications/scheduled/mine — recruiter views all scheduled interviews across own jobs
+exports.getMyScheduledInterviews = async (req, res) => {
+  try {
+    const recruiterJobs = await Job.find({ postedBy: req.user._id }).select('_id');
+    const jobIds = recruiterJobs.map((job) => job._id);
+
+    if (!jobIds.length) {
+      return res.json({ interviews: [] });
+    }
+
+    const interviews = await Application.find({
+      jobId: { $in: jobIds },
+      $or: [
+        { interviewScheduled: true },
+        { 'interview.date': { $exists: true, $ne: null } },
+      ],
+    })
+      .populate('studentId', 'name email')
+      .populate('jobId', 'title company location')
+      .sort({ 'interview.date': 1, 'interview.time': 1, createdAt: -1 })
+      .lean();
+
+    res.json({ interviews });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -131,13 +159,14 @@ exports.getAllApplications = async (req, res) => {
     // For placement_cell, hod, dean: show all applications (query = {})
 
     const apps = await Application.find(query)
+  .populate('studentId', 'name email department')
   .populate('jobId', 'title company location stipend status type')
   .sort({ createdAt: -1 })
   .lean();
 
 const applications = apps.map(app => ({
   ...app,
-  interview: app.interviewDetails || null
+  interview: app.interview || null
 }));
 
 res.json({ applications });
