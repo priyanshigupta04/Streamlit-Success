@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>No Objection Certificate (NOC)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            background-color: white;
+            padding: 20px;
+            line-height: 1.8;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            border: 2px solid #000;
+            padding: 40px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .institution-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a1a1a;
+            margin-bottom: 5px;
+        }
+        
+        .institution-details {
+            font-size: 12px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .document-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #000;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 15px;
+        }
+        
+        .content {
+            margin: 30px 0;
+            line-height: 2;
+        }
+        
+        .date-section {
+            margin-bottom: 20px;
+        }
+        
+        .recipient-info {
+            margin-bottom: 20px;
+        }
+        
+        .info-row {
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .label {
+            display: inline-block;
+            width: 180px;
+            font-weight: bold;
+        }
+        
+        .value {
+            display: inline-block;
+        }
+        
+        .underline {
+            border-bottom: 1px dotted #000;
+            display: inline-block;
+            width: 60%;
+        }
+        
+        .body-text {
+            font-size: 14px;
+            text-align: justify;
+            margin: 25px 0;
+            line-height: 1.8;
+        }
+        
+        .company-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-left: 4px solid #1a1a1a;
+        }
+        
+        .signature-section {
+            margin-top: 40px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+        }
+        
+        .signature-block {
+            text-align: center;
+        }
+        
+        .signature-line {
+            border-top: 2px solid #000;
+            margin-top: 50px;
+            padding-top: 5px;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
+        }
+        
+        .stamp {
+            position: absolute;
+            opacity: 0.15;
+            font-weight: bold;
+            font-size: 60px;
+            color: red;
+            transform: rotate(-45deg);
+            top: 50%;
+            left: 50%;
+            letter-spacing: 10px;
+        }
+        
+        .watermark-ready {
+            position: relative;
+            height: 30px;
+            margin: 20px 0;
+        }
+        
+        table {
+            width: 100%;
+            margin: 15px 0;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        table td {
+            padding: 8px;
+            border: 1px solid #999;
+        }
+        
+        table td.label-col {
+            font-weight: bold;
+            width: 30%;
+            background-color: #f0f0f0;
+        }
+        
+        .indent {
+            margin-left: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="institution-name">{{institutionName}}</div>
+            <div class="institution-details">{{institutionAddress}}</div>
+            <div class="institution-details">Phone: {{institutionPhone}} | Email: {{institutionEmail}}</div>
+            <div class="document-title">No Objection Certificate (NOC)</div>
+        </div>
+        
+        <!-- DATE & TO WHOM IT MAY CONCERN -->
+        <div class="date-section">
+            <strong>Date:</strong> <span class="underline">{{issueDate}}</span>
+        </div>
+        
+        <p style="margin-bottom: 20px;"><strong>TO WHOMSOEVER IT MAY CONCERN</strong></p>
+        
+        <!-- RECIPIENT INFO -->
+        <div class="recipient-info">
+            <div class="info-row">
+                <span class="label"><strong>Name:</strong></span>
+                <span class="value">{{studentName}}</span>
+            </div>
+            <div class="info-row">
+                <span class="label"><strong>Enrollment No.:</strong></span>
+                <span class="value">{{enrollmentNo}}</span>
+            </div>
+            <div class="info-row">
+                <span class="label"><strong>Branch/Department:</strong></span>
+                <span class="value">{{branch}}</span>
+            </div>
+            <div class="info-row">
+                <span class="label"><strong>Academic Year:</strong></span>
+                <span class="value">{{academicYear}}</span>
+            </div>
+            <div class="info-row">
+                <span class="label"><strong>CGPA:</strong></span>
+                <span class="value">{{cgpa}}</span>
+            </div>
+        </div>
+        
+        <!-- MAIN BODY -->
+        <div class="body-text">
+            <p>This is to certify that <strong>{{studentName}}</strong>, a student of {{branch}} branch, {{institutionName}}, has completed his/her {{internshipType}} under our Institution. We have no objection to the candidate's employment with the following organization:</p>
+        </div>
+        
+        <!-- COMPANY SECTION -->
+        <div class="company-section">
+            <div class="info-row">
+                <span class="label"><strong>Company Name:</strong></span>
+                <span class="value">{{companyName}}</span>
+            </div>
+            <div class="info-row">
+                <span class="label"><strong>Job Title/Position:</strong></span>
+                <span class="value">{{jobTitle}}</span>
+            </div>
+            <div class="info-row">
+                <span class="label"><strong>Location:</strong></span>
+                <span class="value">{{jobLocation}}</span>
+            </div>
+            {{#if stipend}}
+            <div class="info-row">
+                <span class="label"><strong>Stipend/Package:</strong></span>
+                <span class="value">{{stipend}}</span>
+            </div>
+            {{/if}}
+            {{#if expectedJoiningDate}}
+            <div class="info-row">
+                <span class="label"><strong>Expected Joining Date:</strong></span>
+                <span class="value">{{expectedJoiningDate}}</span>
+            </div>
+            {{/if}}
+        </div>
+        
+        <!-- TERMS & CONDITIONS -->
+        <div class="body-text">
+            <p><strong>Terms and Conditions:</strong></p>
+            <ol style="margin-left: 20px;">
+                <li>The student shall abide by all the rules and regulations of the organization during his/her {{internshipType}}.</li>
+                <li>In case of any dispute or misconduct, the organization has the right to inform the Institution immediately.</li>
+                <li>The student will complete the tenure as decided by the organization.</li>
+                <li>The student must maintain a good academic record and conduct throughout the {{internshipType}} period.</li>
+                <li>Any certificates, bonds, or agreements required by the organization should be signed by the student before joining.</li>
+            </ol>
+        </div>
+        
+        <!-- VALIDITY -->
+        <div class="body-text">
+            <p><strong>Validity:</strong> This certificate is valid for {{validityPeriod}} from the date of issue.</p>
+        </div>
+        
+        <!-- CLOSING STATEMENT -->
+        <div class="body-text">
+            <p>We wish the student all the best for his/her future endeavors and hope that he/she will uphold the values of the Institution and contribute meaningfully to the organization.</p>
+        </div>
+        
+        <!-- WATERMARK AREA -->
+        <div class="watermark-ready">
+            <!-- Signature and stamp will be added here -->
+        </div>
+        
+        <!-- SIGNATURES -->
+        <div class="signature-section">
+            <div class="signature-block">
+                <div style="margin-bottom: 60px;">
+                    <!-- Mentor/Internal Guide signature area -->
+                </div>
+                <div class="signature-line">
+                    {{mentorName}}<br>
+                    <span style="font-weight: normal; font-size: 11px;">Internal Guide/Mentor</span><br>
+                    <span style="font-weight: normal; font-size: 11px;">{{institutionName}}</span>
+                </div>
+            </div>
+            
+            <div class="signature-block">
+                <div style="margin-bottom: 60px;">
+                    <!-- Dean/Director signature area -->
+                </div>
+                <div class="signature-line">
+                    {{deanName}}<br>
+                    <span style="font-weight: normal; font-size: 11px;">Dean/Director</span><br>
+                    <span style="font-weight: normal; font-size: 11px;">{{institutionName}}</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- FOOTER -->
+        <div class="footer">
+            <p>Generated Date: {{generatedDate}}</p>
+            <p>Document ID: NOC-{{documentId}}</p>
+            <p style="margin-top: 10px; font-size: 10px; color: #999;">This is a system-generated document. Original signature and institutional seal are required for validity.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -47,6 +47,8 @@ const StudentDashboard = () => {
   useEffect(() => {
     if (activeTab === 'internship_form') {
       fetchInternshipForms();
+    } else if (activeTab === 'docs') {
+      fetchDocuments();
     }
   }, [activeTab]);
 
@@ -57,6 +59,27 @@ const StudentDashboard = () => {
     } catch (error) {
       console.error("Failed to fetch internship forms", error);
     }
+  };
+
+  // Fetch document requests from backend
+  const fetchDocuments = async () => {
+    try {
+      const res = await axios.get('/api/documents/mine');
+      console.log('📋 Documents fetched:', res.data);
+      setDocRequests(res.data.documents || []);
+    } catch (error) {
+      console.error("❌ Failed to fetch documents:", error);
+    }
+  };
+  
+  const handleDownload = (docUrl, docType) => {
+    console.log('📥 Attempting to download:', docUrl);
+    if (!docUrl) {
+      alert('Document URL not available. Please contact admin.');
+      return;
+    }
+    // Force download by opening in new window
+    window.open(docUrl, '_blank', 'noopener,noreferrer');
   };
   // 1. PROFILE STATE
   const [profile, setProfile] = useState({
@@ -309,13 +332,13 @@ const StudentDashboard = () => {
     setLogInput({ week: '', hours: '', tasks: '' });
   };
   //NOC
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
   const { orgName, role, mode, startDate, duration, applyingFor, targetUni, faculty, achievements, bonafidePurpose } = docFormData;
 
   // 1. NOC Validation
   if (activeDocType === 'NOC Request') {
-    if (!orgName || !role || !mode || !startDate || !duration || !selectedFile) {
-      alert("⚠️ Please fill all fields and upload the Offer Letter!");
+    if (!orgName || !role || !mode) {
+      alert("⚠️ Please fill Company, Role, and Mode fields!");
       return;
     }
   } 
@@ -335,16 +358,7 @@ const StudentDashboard = () => {
   }
 
   // Agar validation pass ho gaya toh submit karein
-  handleDocRequest(activeDocType);
-  
-  // Form reset aur modal close
-  setDocFormData({
-    orgName: '', role: '', mode: '', startDate: '', duration: '',
-    applyingFor: '', targetUni: '', faculty: '', achievements: '',
-    bonafidePurpose: ''
-  });
-  setSelectedFile(null);
-  setActiveDocType(null);
+  await handleDocRequest(activeDocType);
 };  
 
   const handleInternshipSubmit = async () => {
@@ -366,19 +380,70 @@ const StudentDashboard = () => {
     }
   };
   // 3. DOCUMENT REQUESTS STATE 
-  const [docRequests, setDocRequests] = useState([
-    { id: 1, type: 'NOC Request', status: 'Approved', date: '20/12/2025' }
-  ]);
+  const [docRequests, setDocRequests] = useState([]);
 
-  const handleDocRequest = (type) => {
-    const newRequest = {
-      id: Date.now(),
-      type: type,
-      status: 'Pending',
-      date: new Date().toLocaleDateString()
-    };
-    setDocRequests([newRequest, ...docRequests]);
-    alert(`${type} submitted for approval!`);
+  const handleDocRequest = async (type) => {
+    try {
+      let docType = '';
+      let reason = '';
+      let jobId = null;
+      
+      // Determine document type and extract relevant data
+      if (type === 'NOC Request') {
+        docType = 'noc';
+        reason = `NOC for ${docFormData.orgName} - ${docFormData.role} role`;
+        
+        // Find the matching application/job for this company
+        const matchingApp = myApplications.find(app => 
+          app.company?.toLowerCase() === docFormData.orgName?.toLowerCase()
+        );
+        if (matchingApp?.jobId) {
+          jobId = matchingApp.jobId;
+        }
+        
+        if (!jobId) {
+          alert('⚠️ Could not find matching job application. Please apply for a job first before requesting NOC.');
+          return;
+        }
+      } else if (type === 'LOR Request') {
+        docType = 'custom';
+        reason = `LOR for ${docFormData.applyingFor}`;
+      } else if (type === 'Bonafide') {
+        docType = 'bonafide';
+        reason = docFormData.bonafidePurpose;
+      }
+      
+      // Call backend API
+      const res = await axios.post('/api/documents/', {
+        type: docType,
+        reason: reason,
+        jobId: jobId || null
+      });
+      
+      const newRequest = {
+        id: res.data.document._id,
+        type: type,
+        status: 'Pending',
+        date: new Date().toLocaleDateString(),
+        apiData: res.data.document
+      };
+      setDocRequests([newRequest, ...docRequests]);
+      alert(`✅ ${type} submitted successfully! Status: Pending Approval`);
+      
+      // Reset form
+      setDocFormData({
+        orgName: '', role: '', mode: '', startDate: '', duration: '',
+        applyingFor: '', targetUni: '', faculty: '', achievements: '',
+        bonafidePurpose: ''
+      });
+      setSelectedFile(null);
+      setActiveDocType(null);
+      
+    } catch (err) {
+      console.error('Document request failed:', err);
+      const errorMsg = err.response?.data?.message || err.message;
+      alert(`❌ Failed to submit ${type}: ${errorMsg}`);
+    }
   };
 
   // 4. JOBS & APPLICATIONS STATE
@@ -705,21 +770,89 @@ const status = getProfileStatus();
 
           {/* Request Tracking */}
           <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
-            <h4 className="text-xl font-black italic uppercase mb-8">Request Tracking</h4>
-            <div className="space-y-4">
-              {docRequests.map(req => (
-                <div key={req.id} className="flex items-center justify-between p-6 bg-slate-50 rounded-[1.8rem]">
-                  <div className="flex items-center gap-4">
-                    <ShieldCheck size={20} className="text-slate-400"/>
-                    <div>
-                      <p className="font-black text-xs uppercase italic">{req.type}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">{req.date}</p>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-black uppercase px-4 py-2 rounded-full bg-blue-50 text-blue-600">{req.status}</span>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-8">
+              <h4 className="text-xl font-black italic uppercase">Document Requests</h4>
+              <button 
+                onClick={fetchDocuments}
+                className="p-2 text-slate-600 hover:text-black hover:bg-slate-100 rounded-lg transition-all"
+                title="Refresh documents"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 0 1 14.85-3.36M22.88 20h-6v-6M20.49 9A9 9 0 0 0 5.64 3.64"></path>
+                </svg>
+              </button>
             </div>
+            {docRequests.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText size={40} className="mx-auto text-slate-300 mb-4"/>
+                <p className="text-slate-500 font-bold">No document requests yet</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {docRequests.map(req => {
+                  // Map document types for display
+                  const typeMap = {
+                    'noc': 'NOC Request',
+                    'bonafide': 'Bonafide Certificate',
+                    'completion_certificate': 'Completion Certificate',
+                    'experience_letter': 'Experience Letter',
+                    'custom': 'Custom Document'
+                  };
+                  
+                  // Map status for display
+                  const statusMap = {
+                    'pending': { label: 'Pending', color: 'bg-yellow-50 text-yellow-700' },
+                    'mentor_approved': { label: 'Mentor Approved', color: 'bg-blue-50 text-blue-700' },
+                    'hod_approved': { label: 'HOD Approved', color: 'bg-blue-50 text-blue-700' },
+                    'issued': { label: 'Ready to Download ✓', color: 'bg-green-50 text-green-700' },
+                    'rejected': { label: 'Rejected', color: 'bg-red-50 text-red-700' }
+                  };
+                  
+                  const displayType = typeMap[req.type] || req.type;
+                  const statusInfo = statusMap[req.overallStatus] || { label: req.overallStatus, color: 'bg-slate-50 text-slate-700' };
+                  
+                  return (
+                    <div key={req._id} className="flex items-center justify-between p-6 bg-slate-50 rounded-[1.8rem] border border-slate-100 hover:border-black transition-all">
+                      <div className="flex items-center gap-4 flex-1">
+                        <FileCheck size={20} className={req.overallStatus === 'issued' ? 'text-green-500' : 'text-slate-400'}/>
+                        <div>
+                          <p className="font-black text-xs uppercase italic">{displayType}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">
+                            {new Date(req.createdAt).toLocaleDateString()}
+                            {req.generatedAt && ` • Generated: ${new Date(req.generatedAt).toLocaleDateString()}`}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[9px] font-black uppercase px-4 py-2 rounded-full ${statusInfo.color}`}>
+                          {statusInfo.label}
+                        </span>
+                        
+                        {/* Download button for issued documents */}
+                        {req.overallStatus === 'issued' ? (
+                          req.generatedDocUrl ? (
+                            <button 
+                              onClick={() => handleDownload(req.generatedDocUrl, req.type)}
+                              className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all flex items-center gap-2 text-xs font-bold active:scale-95"
+                              title="Download PDF"
+                            >
+                              <Download size={16} />
+                              <span className="hidden md:inline">Download</span>
+                            </button>
+                          ) : (
+                            <span className="text-[9px] font-bold text-orange-600 px-3 py-1 bg-orange-50 rounded-lg">
+                              Generating PDF...
+                            </span>
+                          )
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

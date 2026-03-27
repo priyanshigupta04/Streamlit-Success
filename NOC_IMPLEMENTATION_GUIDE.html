@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated NOC Generation System - Setup Guide</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        
+        h3 {
+            color: #7f8c8d;
+        }
+        
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+        }
+        
+        code {
+            background-color: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            line-height: 1.4;
+        }
+        
+        .endpoint {
+            background-color: #e8f4f8;
+            padding: 12px;
+            margin: 10px 0;
+            border-left: 5px solid #3498db;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .post { background-color: #27ae60; }
+        .get { background-color: #3498db; }
+        .put { background-color: #f39c12; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .status {
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status.completed {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .status.todo {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .status.optional {
+            background-color: #95a5a6;
+            color: white;
+        }
+        
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+        
+        .highlight {
+            background-color: #fff9c4;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 Automated NOC Generation System</h1>
+        <p><strong>Implementation Status:</strong> <span class="status completed">COMPLETED</span></p>
+        
+        <div class="section">
+            <h3>Project: No Objection Certificate (NOC) Automation</h3>
+            <p>Automated generation of professional No Objection Certificates from template and student/job data, with full approval workflow integration.</p>
+        </div>
+
+        <!-- ============================================== -->
+        <h2>📦 What Was Implemented</h2>
+        <!-- ============================================== -->
+
+        <h3>1. Template Engine</h3>
+        <table>
+            <tr>
+                <th>File</th>
+                <th>Purpose</th>
+                <th>Status</th>
+            </tr>
+            <tr>
+                <td><code>backend/templates/noc.hbs</code></td>
+                <td>Handlebars template for NOC document</td>
+                <td><span class="status completed">✓</span></td>
+            </tr>
+        </table>
+
+        <h3>2. Services Layer</h3>
+        <table>
+            <tr>
+                <th>File</th>
+                <th>Function</th>
+                <th>Status</th>
+            </tr>
+            <tr>
+                <td><code>backend/services/documentGenerator.js</code></td>
+                <td>Core NOC generation logic</td>
+                <td><span class="status completed">✓</span></td>
+            </tr>
+        </table>
+        <p><strong>Key Functions:</strong></p>
+        <ul>
+            <li><code>generateNoc(studentId, jobId)</code> - Main generation function</li>
+            <li><code>validateNocRequirements(studentId, jobId)</code> - Validates required data</li>
+            <li><code>getNocPreview()</code> - Returns template preview HTML</li>
+            <li><code>fetchNocData(studentId, jobId)</code> - Fetches student and job data</li>
+            <li><code>formatDataForTemplate(student, jobData)</code> - Formats data for rendering</li>
+            <li><code>htmlToPdf(html, fileName)</code> - Converts HTML to PDF</li>
+            <li><code>uploadToCloudinary(pdfBuffer, fileName, studentId)</code> - Uploads PDF</li>
+        </ul>
+
+        <h3>3. API Endpoints</h3>
+        <table>
+            <tr>
+                <th>Endpoint</th>
+                <th>Method</th>
+                <th>Auth Required</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td>/api/documents/</td>
+                <td><span class="method post">POST</span></td>
+                <td>Student</td>
+                <td>Request a document (NOC, Bonafide, etc.)</td>
+            </tr>
+            <tr>
+                <td>/api/documents/mine</td>
+                <td><span class="method get">GET</span></td>
+                <td>Student</td>
+                <td>Get student's documents</td>
+            </tr>
+            <tr>
+                <td>/api/documents/pending</td>
+                <td><span class="method get">GET</span></td>
+                <td>Mentor/HOD/Dean</td>
+                <td>Get documents pending approval</td>
+            </tr>
+            <tr>
+                <td>/api/documents/:id/approve</td>
+                <td><span class="method put">PUT</span></td>
+                <td>Mentor/HOD/Dean</td>
+                <td>Approve/reject & <span class="highlight">auto-generate PDF on dean approval</span></td>
+            </tr>
+            <tr>
+                <td>/api/documents/all</td>
+                <td><span class="method get">GET</span></td>
+                <td>Placement Cell</td>
+                <td>View all documents</td>
+            </tr>
+            <tr>
+                <td>/api/documents/noc/preview</td>
+                <td><span class="method get">GET</span></td>
+                <td>None</td>
+                <td>Preview NOC template</td>
+            </tr>
+            <tr>
+                <td>/api/documents/noc/validate</td>
+                <td><span class="method post">POST</span></td>
+                <td>Student</td>
+                <td>Validate NOC requirements before request</td>
+            </tr>
+            <tr>
+                <td>/api/documents/:id/regenerate</td>
+                <td><span class="method post">POST</span></td>
+                <td>Student</td>
+                <td>Regenerate PDF if data changes</td>
+            </tr>
+        </table>
+
+        <h3>4. Database Updates</h3>
+        <p><strong>DocumentRequest Model:</strong> Added fields for tracking generation:</p>
+        <pre>
+generatedDocUrl    String    // Cloudinary PDF URL
+generatedAt        Date      // When PDF was created
+signatureUrl       String    // Dean's digital signature
+signedAt           Date      // When signed
+issueDate          Date      // Official issue date
+expiryDate         Date      // Validity expiration
+documentVersion    Number    // Track re-generations
+
+metadata: {
+  studentName      String
+  enrollmentNo     String
+  branch           String
+  year             Number
+  dateOfGeneration Date
+}
+        </pre>
+
+        <!-- ============================================== -->
+        <h2>🔄 NOC Generation Workflow</h2>
+        <!-- ============================================== -->
+
+        <div class="section">
+            <h3>Step-by-Step Process:</h3>
+            <ol>
+                <li><strong>Student Request:</strong> Student requests NOC with job details
+                    <pre>POST /api/documents/
+{
+  "type": "noc",
+  "reason": "Need NOC for internship",
+  "jobId": "ObjectId"
+}</pre>
+                </li>
+                
+                <li><strong>Mentor Approval:</strong> Mentor reviews and approves
+                    <pre>PUT /api/documents/:id/approve
+{
+  "decision": "approved",
+  "note": "Looks good"
+}</pre>
+                    <code>overallStatus</code> → <code>mentor_approved</code>
+                </li>
+                
+                <li><strong>HOD Approval:</strong> HOD reviews mentor's approval
+                    <pre>PUT /api/documents/:id/approve
+{
+  "decision": "approved",
+  "note": "Approved"
+}</pre>
+                    <code>overallStatus</code> → <code>hod_approved</code>
+                </li>
+                
+                <li><strong>Dean Approval + PDF Generation:</strong> Dean approves and PDF is <span class="highlight">automatically generated</span>
+                    <pre>PUT /api/documents/:id/approve
+{
+  "decision": "approved",
+  "note": "Approved"
+}</pre>
+                    <ul>
+                        <li>✓ <code>overallStatus</code> → <code>issued</code></li>
+                        <li>✓ NOC HTML generated from template</li>
+                        <li>✓ HTML converted to PDF</li>
+                        <li>✓ PDF uploaded to Cloudinary</li>
+                        <li>✓ <code>generatedDocUrl</code> saved in DB</li>
+                        <li>✓ <code>metadata</code> populated from student data</li>
+                        <li>✓ <code>generatedAt</code> timestamp recorded</li>
+                    </ul>
+                </li>
+                
+                <li><strong>Student Retrieves PDF:</strong> Student downloads from NOC
+                    <pre>GET /api/documents/mine
+[
+  {
+    _id: "...",
+    type: "noc",
+    overallStatus: "issued",
+    generatedDocUrl: "https://cloudinary.url/...",
+    generatedAt: "2025-03-13T...",
+    metadata: {...}
+  }
+]</pre>
+                </li>
+            </ol>
+        </div>
+
+        <!-- ============================================== -->
+        <h2>⚙️ Technical Details</h2>
+        <!-- ============================================== -->
+
+        <h3>Dependencies Added</h3>
+        <pre>
+npm install pdfkit handlebars html-pdf nodemailer
+        </pre>
+        <table>
+            <tr>
+                <th>Library</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><code>handlebars</code></td>
+                <td>Template compilation & data merging</td>
+            </tr>
+            <tr>
+                <td><code>html-pdf</code></td>
+                <td>Convert HTML to PDF</td>
+            </tr>
+            <tr>
+                <td><code>pdfkit</code></td>
+                <td>(Optional) Direct PDF creation</td>
+            </tr>
+            <tr>
+                <td><code>nodemailer</code></td>
+                <td>(Optional) Email delivery</td>
+            </tr>
+        </table>
+
+        <h3>Data Mapping (Template Variables)</h3>
+        <pre>
+Student Data Source (User Model):
+  name           → studentName
+  enrollmentNo   → enrollmentNo
+  branch         → branch
+  year           → year
+  cgpa           → cgpa
+  graduationYear → academicYear (calculated)
+  mentorId       → mentorName
+
+Job Data Source (Job Model):
+  company        → companyName
+  title          → jobTitle
+  location       → jobLocation
+  stipend        → stipend
+
+Auto-Generated:
+  issueDate      → Current date
+  documentId     → From studentId last 8 chars
+  validityPeriod → "1 year"
+        </pre>
+
+        <!-- ============================================== -->
+        <h2>📋 Environment Variables Required</h2>
+        <!-- ============================================== -->
+
+        <p>Add these to your <code>.env</code> file:</p>
+        <pre>
+# Institution Details (for NOC template)
+INSTITUTION_NAME=Your College/University Name
+INSTITUTION_ADDRESS=Address, City, State - PIN
+INSTITUTION_PHONE=+91-XXXX-XXXXXX
+INSTITUTION_EMAIL=contact@institution.edu
+
+# Cloudinary (already in use)
+CLOUDINARY_NAME=your_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+        </pre>
+
+        <!-- ============================================== -->
+        <h2>🚀 Key Features</h2>
+        <!-- ============================================== -->
+
+        <ul>
+            <li>✅ <strong>Automatic Generation:</strong> PDF auto-generated when dean approves NOC</li>
+            <li>✅ <strong>Template-Based:</strong> Professional HTML/CSS template with Handlebars</li>
+            <li>✅ <strong>Data Auto-Fill:</strong> Student & job data automatically merged</li>
+            <li>✅ <strong>Cloud Storage:</strong> PDFs stored on Cloudinary (scalable)</li>
+            <li>✅ <strong>Version Control:</strong> Track document regenerations</li>
+            <li>✅ <strong>Metadata Snapshot:</strong> Save student data at time of generation</li>
+            <li>✅ <strong>Validation:</strong> Check for missing required data before generation</li>
+            <li>✅ <strong>Preview:</strong> View template before requesting NOC</li>
+            <li>✅ <strong>Regeneration:</strong> Re-generate PDF if data changes</li>
+            <li>✅ <strong>3-Level Approval:</strong> Integrated with existing approval workflow</li>
+        </ul>
+
+        <!-- ============================================== -->
+        <h2>📝 API Usage Examples</h2>
+        <!-- ============================================== -->
+
+        <h3>1. Request NOC</h3>
+        <pre>
+curl -X POST http://localhost:5000/api/documents/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "noc",
+    "reason": "Need NOC for internship at TechCorp",
+    "jobId": "64a5f8c3d9e1a2b3c4d5e6f7"
+  }'
+        </pre>
+
+        <h3>2. Validate NOC Requirements</h3>
+        <pre>
+curl -X POST http://localhost:5000/api/documents/noc/validate \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "studentId": "64a5f8c3d9e1a2b3c4d5e6f7",
+    "jobId": "64a5f8c3d9e1a2b3c4d5e6f8"
+  }'
+
+Response:
+{
+  "valid": true,
+  "errors": [],
+  "message": "NOC can be requested"
+}
+        </pre>
+
+        <h3>3. Check NOC Status</h3>
+        <pre>
+curl -X GET http://localhost:5000/api/documents/mine \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Response:
+{
+  "documents": [
+    {
+      "_id": "...",
+      "type": "noc",
+      "overallStatus": "issued",
+      "generatedDocUrl": "https://cloudinary.url/noc_file.pdf",
+      "generatedAt": "2025-03-13T10:30:00Z",
+      "metadata": {
+        "studentName": "John Doe",
+        "enrollmentNo": "ENG2021001",
+        "branch": "CSE",
+        "year": 4
+      }
+    }
+  ]
+}
+        </pre>
+
+        <h3>4. Approve NOC (Triggers Generation)</h3>
+        <pre>
+curl -X PUT http://localhost:5000/api/documents/64a5f8c3d9e1a2b3c4d5e6f7/approve \
+  -H "Authorization: Bearer DEAN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decision": "approved",
+    "note": "Approved for placement"
+  }'
+
+Response:
+{
+  "document": {
+    "type": "noc",
+    "overallStatus": "issued",
+    "generatedDocUrl": "https://cloudinary.url/NOC_ENG2021001_1710326400000.pdf",
+    "generatedAt": "2025-03-13T10:30:00Z",
+    "documentVersion": 1,
+    "metadata": {...}
+  }
+}
+        </pre>
+
+        <!-- ============================================== -->
+        <h2>🔜 Next Steps</h2>
+        <!-- ============================================== -->
+
+        <h3>Phase 2: Additional Documents</h3>
+        <table>
+            <tr>
+                <th>Document Type</th>
+                <th>Template</th>
+                <th>Required Data</th>
+                <th>Status</th>
+            </tr>
+            <tr>
+                <td>Bonafide Certificate</td>
+                <td>bonafide.hbs</td>
+                <td>Name, Enrollment, Year, Branch</td>
+                <td><span class="status todo">TODO</span></td>
+            </tr>
+            <tr>
+                <td>Completion Certificate</td>
+                <td>completion_certificate.hbs</td>
+                <td>Student, Internship Data</td>
+                <td><span class="status todo">TODO</span></td>
+            </tr>
+            <tr>
+                <td>Experience Letter</td>
+                <td>experience_letter.hbs</td>
+                <td>Student, Job, Duration</td>
+                <td><span class="status todo">TODO</span></td>
+            </tr>
+            <tr>
+                <td>Digital Signatures</td>
+                <td>Watermark/Signature Module</td>
+                <td>Dean signature image</td>
+                <td><span class="status optional">OPTIONAL</span></td>
+            </tr>
+            <tr>
+                <td>Email Dispatch</td>
+                <td>Email Service</td>
+                <td>Nodemailer config</td>
+                <td><span class="status optional">OPTIONAL</span></td>
+            </tr>
+        </table>
+
+        <h3>Phase 3: Advanced Features</h3>
+        <ul>
+            <li>📧 Email PDF to student automatically</li>
+            <li>🔏 Add Dean's digital signature/watermark</li>
+            <li>📅 Schedule certificate generation on graduation date</li>
+            <li>🔄 Batch document generation for multiple students</li>
+            <li>📊 Document analytics dashboard</li>
+            <li>🗂️ Archive/audit trail for generated documents</li>
+        </ul>
+
+        <!-- ============================================== -->
+        <h2>🧪 Testing</h2>
+        <!-- ============================================== -->
+
+        <p><strong>Before running the system:</strong></p>
+        <ol>
+            <li>Update <code>.env</code> with institution details</li>
+            <li>Ensure Cloudinary credentials are already configured</li>
+            <li>Run: <code>npm install</code> in backend folder</li>
+            <li>Restart backend server</li>
+            <li>Create test student with complete profile (batch, enrollment, CGPA)</li>
+            <li>Create test job posting</li>
+            <li>Apply for NOC requesting that job</li>
+            <li>Approve through mentor → HOD → Dean chain</li>
+            <li>Check database to verify PDF URL is generated</li>
+            <li>Download PDF from Cloudinary URL</li>
+        </ol>
+
+        <h3>Test Checklist:</h3>
+        <pre>
+✓ Student can request NOC
+✓ Validate endpoint returns errors for missing data
+✓ PDF generated automatically on dean approval
+✓ PDF URL saved in database
+✓ PDF downloadable from Cloudinary
+✓ Document metadata captured correctly
+✓ Regenerate endpoint works
+✓ Student receives notification
+        </pre>
+
+        <!-- ============================================== -->
+        <h2>📚 File Summary</h2>
+        <!-- ============================================== -->
+
+        <table>
+            <tr>
+                <th>File Path</th>
+                <th>Type</th>
+                <th>Lines</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td>backend/templates/noc.hbs</td>
+                <td>Template</td>
+                <td>290</td>
+                <td>Professional NOC document template</td>
+            </tr>
+            <tr>
+                <td>backend/services/documentGenerator.js</td>
+                <td>Service</td>
+                <td>280</td>
+                <td>Core generation logic & helper functions</td>
+            </tr>
+            <tr>
+                <td>backend/controllers/documentController.js</td>
+                <td>Controller</td>
+                <td>+80</td>
+                <td>Updated with generation triggers + new endpoints</td>
+            </tr>
+            <tr>
+                <td>backend/routes/documentRoutes.js</td>
+                <td>Routes</td>
+                <td>+5</td>
+                <td>New NOC-specific endpoints</td>
+            </tr>
+            <tr>
+                <td>backend/models/DocumentRequest.js</td>
+                <td>Model</td>
+                <td>+10</td>
+                <td>New fields for tracking generation</td>
+            </tr>
+            <tr>
+                <td>backend/package.json</td>
+                <td>Config</td>
+                <td>+4</td>
+                <td>Added dependencies (handlebars, html-pdf, etc.)</td>
+            </tr>
+        </table>
+
+        <!-- ============================================== -->
+        <h2>✅ Implementation Checklist</h2>
+        <!-- ============================================== -->
+
+        <ul style="list-style: none; padding: 0;">
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Template created (noc.hbs)</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Document generator service</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Controller updated for generation trigger</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Routes added for new endpoints</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Database model updated</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Dependencies added to package.json</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Integration with approval workflow</li>
+            <li style="margin: 10px 0;"><span class="status completed">✓</span> Validation endpoints</li>
+            <li style="margin: 10px 0;"><span class="status todo">○</span> Install dependencies</li>
+            <li style="margin: 10px 0;"><span class="status todo">○</span> Update .env with institution details</li>
+            <li style="margin: 10px 0;"><span class="status todo">○</span> Test end-to-end workflow</li>
+        </ul>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+        <p style="text-align: center; color: #7f8c8d; font-size: 14px;">
+            <strong>Automated Documentation System</strong><br>
+            Ready for Phase 2: Bonafide, Completion Certificate & Experience Letter
+        </p>
+    </div>
+</body>
+</html>

@@ -33,7 +33,7 @@ const HODDashboard = () => {
   const handleApprove = async (docId, action) => {
     try {
       await axios.put(`/api/documents/${docId}/approve`, {
-        status: action,
+        decision: action,
         note: approvalNote,
       });
       setApprovalNote('');

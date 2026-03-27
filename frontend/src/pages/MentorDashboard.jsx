@@ -110,7 +110,7 @@ setInterviewStudents(res.data.interviews || []);
   const handleApprove = async (docId, action) => {
     try {
       await axios.put(`/api/documents/${docId}/approve`, {
-        status: action, // 'approved' or 'rejected'
+        decision: action, // 'approved' or 'rejected'
         note: approvalNote,
       });
       setApprovalNote('');
