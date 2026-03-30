@@ -5,7 +5,7 @@ Weights: semantic similarity 40%, skill overlap 35%, domain match 15%, profile c
 
 from similarity_engine import SimilarityEngine
 from skill_extractor import extract_skills
-from domain_model import predict_domain, predict_domain_vector
+from domain_model import predict_domain_vector
 
 _sim_engine = SimilarityEngine()
 
@@ -13,13 +13,14 @@ _sim_engine = SimilarityEngine()
 def _skill_overlap_score(resume_skills, job_skills):
     """Jaccard-style overlap between resume skills and required job skills."""
     if not job_skills or not isinstance(job_skills, list):
-        return 100.0
+        # Neutral score when required skills are missing in job metadata.
+        return 55.0
         
     resume_set = set(s.lower() for s in resume_skills if isinstance(s, str))
     job_set = set(s.lower() for s in job_skills if isinstance(s, str))
 
     if not job_set:
-        return 100.0
+        return 55.0
 
     matched = resume_set & job_set
     return round((len(matched) / len(job_set)) * 100, 2)
@@ -38,12 +39,12 @@ def _domain_match_score(resume_text, job_domain):
     job_domain_lower = job_domain.lower()
     for domain, prob in domain_vector.items():
         if domain.lower() == job_domain_lower:
-            return round(prob * 100, 2)
+            return round(float(prob) * 100, 2)
 
     # Partial match - check if job_domain is substring of any predicted domain
     for domain, prob in domain_vector.items():
         if job_domain_lower in domain.lower() or domain.lower() in job_domain_lower:
-            return round(prob * 100, 2)
+            return round(float(prob) * 100, 2)
 
     return 25.0
 
@@ -65,35 +66,37 @@ def score_student_vs_job(resume_text, job, profile_completeness=100):
     job_domain = job.get("domain", "")
 
     # 1. Semantic similarity (40%)
-    semantic = _sim_engine.compute_similarity(resume_text, jd_text) if jd_text else 50.0
+    semantic = float(_sim_engine.compute_similarity(resume_text, jd_text)) if jd_text else 50.0
+    semantic = max(0.0, min(100.0, semantic))
 
     # 2. Skill overlap (35%)
     resume_skills = extract_skills(resume_text)
-    skill_score = _skill_overlap_score(resume_skills, required_skills)
+    skill_score = float(_skill_overlap_score(resume_skills, required_skills))
 
     # 3. Domain match (15%)
-    domain_score = _domain_match_score(resume_text, job_domain)
+    domain_score = float(_domain_match_score(resume_text, job_domain))
 
     # 4. Profile completeness (10%)
     profile_score = float(profile_completeness)
+    profile_score = max(0.0, min(100.0, profile_score))
 
     # Weighted total
-    overall = round(
+    overall = float(round(
         semantic * 0.40 +
         skill_score * 0.35 +
         domain_score * 0.15 +
         profile_score * 0.10,
         2
-    )
+    ))
 
     return {
-        "overallScore": overall,
-        "semantic": round(semantic, 2),
-        "skillOverlap": round(skill_score, 2),
-        "domainMatch": round(domain_score, 2),
-        "profileCompleteness": round(profile_score, 2),
-        "matchedSkills": sorted(set(s.lower() for s in resume_skills if isinstance(s, type(''))) & set(s.lower() for s in required_skills if isinstance(s, type('')))) if isinstance(required_skills, list) else [],
-        "missingSkills": sorted(set(s.lower() for s in required_skills if isinstance(s, type(''))) - set(s.lower() for s in resume_skills if isinstance(s, type('')))) if isinstance(required_skills, list) else [],
+        "overallScore": float(overall),
+        "semantic": float(round(float(semantic), 2)),
+        "skillOverlap": float(round(float(skill_score), 2)),
+        "domainMatch": float(round(float(domain_score), 2)),
+        "profileCompleteness": float(round(float(profile_score), 2)),
+        "matchedSkills": sorted(set(s.lower() for s in resume_skills if isinstance(s, str)) & set(s.lower() for s in required_skills if isinstance(s, str))) if isinstance(required_skills, list) else [],
+        "missingSkills": sorted(set(s.lower() for s in required_skills if isinstance(s, str)) - set(s.lower() for s in resume_skills if isinstance(s, str))) if isinstance(required_skills, list) else [],
     }
 
 

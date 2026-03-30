@@ -1,15 +1,18 @@
 import pandas as pd
 import joblib
 import os
+import json
+import warnings
+import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
-MODELS_PATH = "models"
-DATA_PATH = "data/labeled_resumes.csv"
-
 BASE_DIR = os.path.dirname(__file__)
+MODELS_PATH = os.path.join(BASE_DIR, "models")
+DATA_PATH = os.path.join(BASE_DIR, "data", "labeled_resumes.csv")
 MODEL_FILE = os.path.join(BASE_DIR, "models/domain_classifier.pkl")
 VECTORIZER_FILE = os.path.join(BASE_DIR, "models/tfidf_vectorizer.pkl")
+METADATA_FILE = os.path.join(BASE_DIR, "models/domain_model_meta.json")
 
 # Load model globally (efficient)
 model = None
@@ -40,6 +43,11 @@ def train_domain_model():
 
     joblib.dump(model, MODEL_FILE)
     joblib.dump(vectorizer, VECTORIZER_FILE)
+    with open(METADATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump({
+            'sklearn_version': sklearn.__version__,
+            'rows': int(len(data)),
+        }, f)
 
     print("Model trained successfully!")
 
@@ -48,6 +56,29 @@ def load_model():
     global model, vectorizer
 
     if model is None or vectorizer is None:
+        if not os.path.exists(MODEL_FILE) or not os.path.exists(VECTORIZER_FILE):
+            train_domain_model()
+
+        retrain_required = False
+        if os.path.exists(METADATA_FILE):
+            try:
+                with open(METADATA_FILE, 'r', encoding='utf-8') as f:
+                    meta = json.load(f)
+                trained_with = meta.get('sklearn_version')
+                if trained_with and trained_with != sklearn.__version__:
+                    retrain_required = True
+                    warnings.warn(
+                        f"Domain model was trained with sklearn {trained_with} but runtime is {sklearn.__version__}. Retraining for compatibility.",
+                        RuntimeWarning
+                    )
+            except Exception:
+                retrain_required = True
+        else:
+            retrain_required = True
+
+        if retrain_required:
+            train_domain_model()
+
         model = joblib.load(MODEL_FILE)
         vectorizer = joblib.load(VECTORIZER_FILE)
 

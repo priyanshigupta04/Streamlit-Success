@@ -16,11 +16,9 @@ from typing import List, Optional, Dict
 # Add parent dir to path so imports work
 sys.path.insert(0, os.path.dirname(__file__))
 
-from resume_engine import analyze_resume
 from skill_extractor import extract_skills, extract_skills_with_domains
 from domain_model import predict_domain, predict_domain_vector
-from scorer import score_student_vs_job, rank_jobs_for_student
-from suggestion_engine import generate_suggestions
+from scorer import rank_jobs_for_student
 from resume_parser import parse_resume_fields
 
 app = FastAPI(title="SkillSync AI Engine", version="1.0.0")
@@ -48,6 +46,23 @@ class SkillsRequest(BaseModel):
     text: str
 
 
+def _build_resume_only_suggestions(text: str, skills: List[str], confidence: float) -> List[str]:
+        suggestions: List[str] = []
+        word_count = len((text or '').split())
+
+        if word_count < 120:
+            suggestions.append('Resume content is short. Add project details, impact metrics, and tools used.')
+        if len(skills) < 8:
+            suggestions.append('Add more role-specific technical skills and frameworks for better matching.')
+        if confidence < 0.55:
+            suggestions.append('Domain clarity is low. Add a clearer headline and stronger domain-specific keywords.')
+
+        if not suggestions:
+            suggestions.append('Resume looks strong for AI matching. Keep it updated with recent projects and achievements.')
+
+        return suggestions
+
+
 # --- Endpoints ---
 
 @app.get("/health")
@@ -62,24 +77,28 @@ def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail="Resume text too short")
 
     try:
-        # Core analysis
-        analysis = analyze_resume(req.resume_text)
-
         # Domain prediction with vector
         domain, confidence, domain_scores = predict_domain(req.resume_text)
         domain_vector = predict_domain_vector(req.resume_text)
 
         # Skills with domain grouping
+        flat_skills = extract_skills(req.resume_text)
         skills_by_domain = extract_skills_with_domains(req.resume_text)
 
-        # Suggestions
-        suggestions = generate_suggestions(req.resume_text)
+        suggestions = _build_resume_only_suggestions(req.resume_text, flat_skills, float(confidence))
+
+        analysis = {
+            "wordCount": len(req.resume_text.split()),
+            "skillCount": len(flat_skills),
+            "domain": domain,
+            "confidence": round(float(confidence), 4),
+        }
 
         return {
-            "skills": analysis.get("skills", []),
+            "skills": flat_skills,
             "skillsByDomain": skills_by_domain,
             "domain": domain,
-            "confidence": round(confidence, 4),
+            "confidence": round(float(confidence), 4),
             "domainScores": domain_scores,
             "domainVector": domain_vector,
             "suggestions": suggestions,
@@ -150,12 +169,12 @@ def _run_ai_analysis(text: str) -> dict:
         skills_flat   = extract_skills(text)
         skills_by_dom = extract_skills_with_domains(text)
         domain, confidence, domain_scores = predict_domain(text)
-        suggestions   = generate_suggestions(text)
+        suggestions   = _build_resume_only_suggestions(text, skills_flat, float(confidence))
         return {
             "skills":     skills_flat,
             "skillsByDomain": skills_by_dom,
             "domain":     domain,
-            "confidence": round(confidence, 4),
+            "confidence": round(float(confidence), 4),
             "domainScores": domain_scores,
             "suggestions": suggestions,
         }
