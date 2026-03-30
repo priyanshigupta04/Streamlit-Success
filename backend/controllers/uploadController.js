@@ -40,7 +40,7 @@ const uploadResume = async (req, res) => {
     }
 
     // cloudinary multer storage can populate `path`, `secure_url` or `url`
-    const resumeUrl  = req.file.path || req.file.secure_url || req.file.url;
+    const resumeUrl  = req.file.secure_url || req.file.url || req.file.path;
     const resumeName = req.file.originalname || '';
 
     if (!resumeUrl) {
@@ -67,28 +67,14 @@ const uploadResume = async (req, res) => {
       // Still save the resume URL even if AI parse fails
     }
 
-    // ── Step 2: Build DB update payload with all auto-filled fields ──
+    // ── Step 2: Build DB update payload (do not overwrite manual profile fields) ──
     const updateData = {
       resumeUrl,
       resumeName,
     };
 
-    // Only overwrite if Python returned a value
+    // Keep parsed resume text for AI matching, but preserve profile fields as entered by user.
     if (parsedFields.resumeText)    updateData.resumeText    = parsedFields.resumeText;
-    if (parsedFields.skills?.length) {
-      // Store as comma-separated string (matches frontend normalizeUser)
-      updateData.skills = Array.isArray(parsedFields.skills)
-        ? parsedFields.skills.join(', ')
-        : parsedFields.skills;
-    }
-    if (parsedFields.name)          updateData.name          = parsedFields.name;
-    if (parsedFields.contact)       updateData.contact       = parsedFields.contact;
-    if (parsedFields.github)        updateData.github        = parsedFields.github;
-    if (parsedFields.linkedin)      updateData.linkedin      = parsedFields.linkedin;
-    if (parsedFields.cgpa)          updateData.cgpa          = parsedFields.cgpa;
-    if (parsedFields.branch)        updateData.branch        = parsedFields.branch;
-    if (parsedFields.projects?.length)       updateData.projects       = parsedFields.projects;
-    if (parsedFields.certifications?.length) updateData.certifications = parsedFields.certifications;
 
     // ── Step 3: Save to DB ──
     const user = await User.findByIdAndUpdate(
@@ -281,4 +267,56 @@ const viewOfferLetter = async (req, res) => {
   }
 };
 
-module.exports = { uploadProfileImage, uploadResume, uploadOfferLetter, viewOfferLetter };
+// ─────────────────────────────────────────────
+//  GET /api/upload/resume/view/:studentId
+//  Streams the exact stored resume PDF with
+//  proper headers so browser renders it.
+// ─────────────────────────────────────────────
+const viewResume = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const student = await User.findById(studentId).select('resumeUrl resumeName mentorId department');
+
+    if (!student || !student.resumeUrl) {
+      return res.status(404).json({ message: 'Resume not found for this student' });
+    }
+
+    const isOwner = req.user._id.toString() === studentId;
+    const isPlacement = req.user.role === 'placement_cell' || req.user.role === 'admin';
+    const isAssignedMentor =
+      req.user.role === 'mentor' &&
+      student.mentorId &&
+      student.mentorId.toString() === req.user._id.toString();
+    const isSameDepartmentMentor =
+      req.user.role === 'mentor' &&
+      student.department &&
+      req.user.department &&
+      student.department.toLowerCase() === req.user.department.toLowerCase();
+
+    if (!(isOwner || isPlacement || isAssignedMentor || isSameDepartmentMentor)) {
+      return res.status(403).json({ message: 'Not authorized to view this resume' });
+    }
+
+    const upstream = await axios.get(student.resumeUrl, {
+      responseType: 'stream',
+      timeout: 30000,
+    });
+
+    const safeName = (student.resumeName || 'resume.pdf').replace(/[^a-zA-Z0-9._\- ()]/g, '_');
+    const filename = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-store');
+
+    upstream.data.pipe(res);
+  } catch (err) {
+    console.error('viewResume error:', err.message);
+    if (err.response?.status === 404) {
+      return res.status(404).json({ message: 'Stored resume file was not found' });
+    }
+    return res.status(500).json({ message: 'Failed to open resume', error: err.message });
+  }
+};
+
+module.exports = { uploadProfileImage, uploadResume, uploadOfferLetter, viewOfferLetter, viewResume };

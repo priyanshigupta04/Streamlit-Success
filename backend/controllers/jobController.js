@@ -1,6 +1,176 @@
 const Job = require("../models/Job");
 const Notification = require("../models/Notification");
 const Application = require("../models/Application");
+const User = require("../models/User");
+
+const normalizeSkillList = (skills) => {
+  if (Array.isArray(skills)) return skills.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof skills === 'string') {
+    return skills
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const normalizeStringList = (value) => {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+};
+
+const buildResumeContextFromProfile = (user) => {
+  const skills = normalizeSkillList(user.skills);
+  const projects = normalizeStringList(user.projects);
+  const certifications = normalizeStringList(user.certifications);
+
+  const sections = [
+    `Name: ${user.name || ''}`,
+    `Email: ${user.email || ''}`,
+    `Department: ${user.department || ''}`,
+    `Branch: ${user.branch || ''}`,
+    `Specialization: ${user.specialization || ''}`,
+    `Semester: ${user.semester || ''}`,
+    `CGPA: ${user.cgpa || ''}`,
+    `Skills: ${skills.join(', ')}`,
+    `Projects: ${projects.join(', ')}`,
+    `Certifications: ${certifications.join(', ')}`,
+    `Bio: ${user.bio || ''}`,
+    `Internship Reason: ${user.internshipReason || ''}`,
+  ];
+
+  return sections
+    .map((part) => part.trim())
+    .filter((part) => part && !part.endsWith(':'))
+    .join('. ');
+};
+
+const mapRankingsToJobs = (jobs, rankings) => {
+  const rankedJobs = [];
+
+  for (const rank of rankings || []) {
+    const fullJob = jobs.find((j) => j._id.toString() === String(rank.jobId));
+    if (!fullJob) continue;
+
+    rankedJobs.push({
+      ...fullJob.toObject(),
+      matchData: {
+        overallScore: rank.overallScore,
+        semantic: rank.semantic,
+        skillOverlap: rank.skillOverlap,
+        domainMatch: rank.domainMatch,
+        matchedSkills: rank.matchedSkills || [],
+        missingSkills: rank.missingSkills || [],
+      },
+    });
+  }
+
+  return rankedJobs;
+};
+
+const canonicalizeSkill = (skill) => {
+  const raw = String(skill || '').toLowerCase().trim();
+  if (!raw) return '';
+
+  const cleaned = raw
+    .replace(/\b(basic|intermediate|advanced|beginner)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const compact = cleaned.replace(/[\s._-]+/g, '');
+
+  if (compact === 'reactjs' || cleaned === 'react js' || cleaned === 'react') return 'react';
+  if (compact === 'nodejs' || cleaned === 'node js' || cleaned === 'node') return 'node.js';
+  if (cleaned === 'js' || compact === 'javascript') return 'javascript';
+  if (compact === 'html5' || cleaned === 'html') return 'html';
+  if (compact === 'css3' || cleaned === 'css') return 'css';
+  if (compact === 'nextjs' || cleaned === 'next js' || cleaned === 'next.js') return 'next.js';
+  if (compact === 'angularjs' || cleaned.includes('angular')) return 'angular';
+
+  return cleaned;
+};
+
+const hasFrontendStack = (skills) => {
+  const set = new Set(skills || []);
+  return set.has('react') || set.has('javascript') || set.has('html') || set.has('css') || set.has('next.js');
+};
+
+const rankJobsHeuristically = (jobs, userSkills) => {
+  const skillSet = new Set((userSkills || []).map(canonicalizeSkill).filter(Boolean));
+
+  const scored = jobs.map((job) => {
+    const title = String(job.title || '').toLowerCase();
+    const domain = String(job.domain || '').toLowerCase();
+    const description = String(job.description || '').toLowerCase();
+    const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
+    const normalizedRequired = requiredSkills.map(canonicalizeSkill).filter(Boolean);
+
+    const matchedSkills = normalizedRequired.filter((s) => skillSet.has(s));
+    const missingSkills = normalizedRequired.filter((s) => !skillSet.has(s));
+
+    let keywordBoost = 0;
+    for (const skill of skillSet) {
+      if (!skill) continue;
+      if (title.includes(skill)) keywordBoost += 18;
+      else if (description.includes(skill)) keywordBoost += 6;
+    }
+
+    if (title.includes('react') && skillSet.has('react')) keywordBoost += 20;
+    if ((title.includes('frontend') || domain.includes('frontend')) && hasFrontendStack(skillSet)) keywordBoost += 10;
+
+    const overlapScore = normalizedRequired.length
+      ? Math.round((matchedSkills.length / normalizedRequired.length) * 100)
+      : 55;
+
+    let intentBoost = 0;
+    if (title.includes('react') && skillSet.has('react')) intentBoost += 10;
+    if (title.includes('frontend') && skillSet.has('react')) intentBoost += 3;
+
+    const overallScore = Math.max(0, Math.min(100, Math.round(overlapScore * 0.7 + keywordBoost * 0.3 + intentBoost)));
+
+    return {
+      ...job.toObject(),
+      matchData: {
+        overallScore,
+        semantic: null,
+        skillOverlap: overlapScore,
+        domainMatch: null,
+        matchedSkills,
+        missingSkills,
+      },
+    };
+  });
+
+  scored.sort((a, b) => (b.matchData?.overallScore || 0) - (a.matchData?.overallScore || 0));
+  return scored;
+};
+
+const getAxiosErrorMessage = (err) => {
+  return (
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.message ||
+    'service unavailable'
+  );
+};
+
+const estimateProfileCompleteness = (user) => {
+  const checks = [
+    !!(user.name && user.name.trim()),
+    !!(user.email && user.email.trim()),
+    !!(user.branch && String(user.branch).trim()),
+    !!(user.cgpa && String(user.cgpa).trim()),
+    normalizeSkillList(user.skills).length > 0,
+    !!(user.resumeUrl && String(user.resumeUrl).trim()),
+    !!(user.resumeText && String(user.resumeText).trim()),
+    normalizeStringList(user.projects).length > 0,
+    !!(user.linkedin && String(user.linkedin).trim()),
+    !!(user.github && String(user.github).trim()),
+  ];
+
+  const score = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  return Math.min(100, Math.max(10, score));
+};
 
 // POST /api/jobs — recruiter creates a job
 exports.createJob = async (req, res) => {
@@ -195,12 +365,64 @@ exports.getRecommendedJobs = async (req, res) => {
 
     // 2. Format jobs and resume text for the Flask API
     const user = req.user;
-    // Construct a logical resume text block combining skills and structured info
-    let resumeText = user.resumeText || '';
+    const aiMeta = {
+      serviceStatus: { recommendation: 'not_called', analysis: 'not_called' },
+      warnings: [],
+      resumeSource: 'profile',
+      jobsConsidered: jobs.length,
+      profileCompleteness: estimateProfileCompleteness(user),
+      usedFallbackRanking: false,
+      profileSnapshot: {
+        branch: user.branch || '',
+        specialization: user.specialization || '',
+        semester: user.semester || null,
+        cgpa: user.cgpa || '',
+        skillCount: normalizeSkillList(user.skills).length,
+      },
+    };
+
+    let resumeText = (user.resumeText || '').trim();
+    if (resumeText.length >= 20) {
+      aiMeta.resumeSource = 'resumeText';
+    } else if (user.resumeUrl) {
+      // Try rebuilding missing resumeText from already uploaded resume URL.
+      try {
+        const axios = require('axios');
+        const fastApiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+        const parseResponse = await axios.post(
+          `${fastApiUrl}/parse-resume-url`,
+          { resume_url: user.resumeUrl },
+          { timeout: 30000 }
+        );
+
+        const parsedFields = parseResponse.data?.fields || {};
+        const parsedText = String(parsedFields.resumeText || '').trim();
+
+        if (parsedText.length >= 20) {
+          resumeText = parsedText;
+          aiMeta.resumeSource = 'resumeUrlParsed';
+
+          // Persist only raw resume text for AI usage; keep profile fields manual/user-controlled.
+          await User.findByIdAndUpdate(user._id, { resumeText: parsedText }, { new: false });
+        } else {
+          aiMeta.warnings.push('Resume URL parse returned insufficient text, using profile fallback.');
+        }
+      } catch (parseErr) {
+        aiMeta.warnings.push(`Resume re-parse failed: ${getAxiosErrorMessage(parseErr)}`);
+      }
+    }
+
     if (!resumeText || resumeText.length < 20) {
-       // fallback if no parsed text, build a synthetic resume
-       const skills = Array.isArray(user.skills) ? user.skills.join(', ') : (user.skills || '');
-       resumeText = `${user.bio || ''} Education: ${user.branch || ''} ${user.specialization || ''}. Skills: ${skills}. Projects: ${(user.projects || []).join(', ')}.`;
+      resumeText = buildResumeContextFromProfile(user);
+      aiMeta.resumeSource = 'profileSynthesized';
+    }
+
+    if (!resumeText || resumeText.length < 20) {
+      aiMeta.usedFallbackRanking = true;
+      aiMeta.serviceStatus.recommendation = 'fallback';
+      aiMeta.warnings.push('Insufficient profile context for AI ranking. Showing profile-skill fallback ranking.');
+      const heuristicRanked = rankJobsHeuristically(jobs, normalizeSkillList(user.skills));
+      return res.json({ jobs: heuristicRanked, ai: { analysis: null, meta: aiMeta } });
     }
 
     // Format jobs to strip Mongoose objects
@@ -213,51 +435,70 @@ exports.getRecommendedJobs = async (req, res) => {
       jdText: j.description || '',
     }));
 
-    // 3. Call the Python Flask API
+    // 3. Call Python AI services (analysis + recommendation)
     const axios = require('axios');
     const flaskUrl = process.env.FLASK_API_URL || 'http://localhost:8001';
+    const fastApiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    let analysis = null;
+
+    try {
+      const analysisResponse = await axios.post(
+        `${fastApiUrl}/analyze`,
+        { resume_text: resumeText },
+        { timeout: 30000 }
+      );
+      analysis = analysisResponse.data || null;
+      aiMeta.serviceStatus.analysis = 'ok';
+    } catch (analysisError) {
+      aiMeta.serviceStatus.analysis = 'failed';
+      aiMeta.warnings.push(`Profile analysis unavailable: ${analysisError.message}`);
+    }
     
+    let rankingError = null;
+    let rankedJobs = [];
+
+    // Preferred: FastAPI recommendation endpoint
+    try {
+      const aiResponse = await axios.post(`${fastApiUrl}/recommend`, {
+        resume_text: resumeText,
+        jobs: jobsPayload,
+        profile_completeness: aiMeta.profileCompleteness,
+      }, { timeout: 30000 });
+
+      rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
+      if (rankedJobs.length > 0) {
+        aiMeta.serviceStatus.recommendation = 'ok';
+        return res.json({ jobs: rankedJobs, ai: { analysis, meta: aiMeta } });
+      }
+    } catch (fastApiRecommendError) {
+      rankingError = fastApiRecommendError;
+    }
+
+    // Secondary: legacy Flask endpoint
     try {
       const aiResponse = await axios.post(`${flaskUrl}/recommend-jobs`, {
         resume_text: resumeText,
         jobs: jobsPayload,
-        profile_completeness: user.profileComplete ? 100 : 50
-      });
+        profile_completeness: aiMeta.profileCompleteness,
+      }, { timeout: 30000 });
 
-      // 4. Map the ranked jobs back to their full mongoose schemas
-      const rankings = aiResponse.data.rankings || [];
-      const rankedJobs = [];
-      
-      for (const rank of rankings) {
-        const fullJob = jobs.find(j => j._id.toString() === rank.jobId);
-        if (fullJob) {
-          // Send the match score info along with the job document
-          rankedJobs.push({
-            ...fullJob.toObject(),
-            matchData: {
-              overallScore: rank.overallScore,
-              semantic: rank.semantic,
-              skillOverlap: rank.skillOverlap,
-              domainMatch: rank.domainMatch,
-              matchedSkills: rank.matchedSkills,
-              missingSkills: rank.missingSkills
-            }
-          });
-        }
+      rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
+      if (rankedJobs.length > 0) {
+        aiMeta.serviceStatus.recommendation = 'ok';
+        aiMeta.warnings.push('Using legacy ranking service fallback.');
+        return res.json({ jobs: rankedJobs, ai: { analysis, meta: aiMeta } });
       }
-
-      // if AI returned no matches (rankings empty) or failed to match any job,
-      // fall back to unranked job list so frontend still has something to show.
-      if (rankedJobs.length === 0) {
-        return res.json({ jobs });
-      }
-
-      return res.json({ jobs: rankedJobs });
-    } catch (aiError) {
-      console.error('AI Recommendation failed, returning unranked jobs:', aiError.message);
-      // Fallback to unranked if AI is down
-      return res.json({ jobs });
+    } catch (flaskRecommendError) {
+      rankingError = rankingError || flaskRecommendError;
     }
+
+    // Final: deterministic local ranking
+    aiMeta.serviceStatus.recommendation = 'fallback';
+    aiMeta.usedFallbackRanking = true;
+    aiMeta.warnings.push(`AI recommendation unavailable: ${getAxiosErrorMessage(rankingError)}`);
+    aiMeta.warnings.push('Showing profile-skill-based fallback ranking.');
+    const heuristicRanked = rankJobsHeuristically(jobs, normalizeSkillList(user.skills));
+    return res.json({ jobs: heuristicRanked, ai: { analysis, meta: aiMeta } });
 
   } catch (err) {
     res.status(500).json({ message: err.message });

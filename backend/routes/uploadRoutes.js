@@ -7,6 +7,7 @@ const {
   uploadResume: handleResume,
   uploadOfferLetter: handleOfferLetter,
   viewOfferLetter,
+  viewResume,
 } = require('../controllers/uploadController');
 
 // POST /api/upload/image  — upload profile picture
@@ -61,5 +62,8 @@ router.post('/offer-letter', protect, (req, res, next) => {
 
 // GET /api/upload/offer-letter/view/:studentId — stream offer letter with correct PDF headers
 router.get('/offer-letter/view/:studentId', protect, viewOfferLetter);
+
+// GET /api/upload/resume/view/:studentId — stream resume with correct PDF headers
+router.get('/resume/view/:studentId', protect, viewResume);
 
 module.exports = router;

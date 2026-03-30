@@ -15,10 +15,15 @@ const imageStorage = new CloudinaryStorage({
 // --- Resume PDF Storage ---
 const resumeStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: 'skillsync/resumes',
-    allowed_formats: ['pdf'],
-    resource_type: 'raw',
+  params: (req, file) => {
+    const userId = req?.user?._id?.toString() || 'anonymous';
+    const timestamp = Date.now();
+    return {
+      folder: 'skillsync/resumes',
+      allowed_formats: ['pdf'],
+      resource_type: 'raw',
+      public_id: `${userId}-${timestamp}`,
+    };
   },
 });
 

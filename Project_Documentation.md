@@ -1,74 +1,214 @@
-# Streamlining Project Documentation
+# Streamlining Success
+## Professional Project Documentation
 
-## 1. What This Project Is
-**"Streamlining"** (also referred to as SS-real) is a **Comprehensive University Placement and Internship Management Portal**. It serves as a centralized platform to bridge the gap between students, university faculty (Mentors, HODs, Deans, Internal Guides), Placement Cells, and Recruiters.
+Version: 2.0  
+Last Updated: March 2026
 
-## 2. What It Is Doing
-The platform digitalizes and automates the entire lifecycle of a student's placement and internship journey. It eliminates manual paperwork and fragmented communication by providing dedicated dashboards for every stakeholder. From the moment a student uploads their resume to the day they download their No Objection Certificate (NOC) for an internship, every step is tracked, verified, and managed within the system.
+## 1. Executive Summary
+Streamlining Success is a role-based university platform designed to manage the complete internship and placement lifecycle. It unifies student operations, faculty approvals, recruiter workflows, and administrative oversight in a single system.
 
-## 3. Technology Stack Used
-The project is built using the **MERN** stack, augmented with AI capabilities and document generation tools:
+The platform reduces manual coordination, improves approval traceability, and provides real-time visibility across stakeholders.
 
-### Frontend (User Interface)
-- **React.js**: Core framework for building the single-page application.
-- **Tailwind CSS**: Utility-first CSS framework for highly customized, responsive styling.
-- **Lucide React**: Beautiful, consistent iconography.
-- **React Router DOM**: Client-side routing for navigating between dashboards.
-- **Axios**: HTTP client for API requests to the backend.
+## 2. Problem Statement
+Universities typically manage placements and internship compliance through disconnected channels (emails, spreadsheets, paper approvals, and verbal follow-ups). This creates:
+- approval delays
+- weak process visibility
+- data inconsistency
+- low accountability
+- poor student experience
 
-### Backend (Server & API)
-- **Node.js & Express.js**: Server runtime and API framework.
-- **MongoDB & Mongoose**: NoSQL database and ODM for flexible data modeling.
-- **JWT (JSON Web Tokens)**: Secure, stateless authentication and authorization.
-- **Cloudinary**: Cloud storage for profile images, resumes, and offer letters.
-- **Multer**: Middleware for handling `multipart/form-data` (file uploads).
-- **html-pdf & Handlebars (hbs)**: PDF generation engine. HTML templates are written in Handlebars, populated with student data, and converted to downloadable PDFs.
+Streamlining Success addresses these issues with centralized workflows, role-driven access, and automated document generation.
 
-### AI Integration
-- Uses AI to automatically parse uploaded resumes, extract key fields (Name, CGPA, GitHub, LinkedIn), and auto-populate the student's profile.
-- Powers an **AI Recommendation Engine** that matches students with jobs based on a compatibility score between their skills and the job requirements.
+## 3. Objectives
+- Digitize the full placement and internship process.
+- Standardize multi-level academic approval chains.
+- Enable transparent status tracking for students and faculty.
+- Automate NOC/LOR/Bonafide issuance after final approval.
+- Improve operational productivity through dashboards, filters, exports, and notifications.
 
----
+## 4. Stakeholders and Roles
+### Student
+- profile management
+- resume and offer letter upload
+- job discovery and application tracking
+- internship form and weekly log submission
+- document requests and issued document downloads
 
-## 4. Key Workflows and How It Works
+### Internal Guide
+- assigned student monitoring
+- weekly log review and feedback
+- attendance and review scheduling
+- attendance report sharing to HOD/Dean
 
-### A. Role-Based Access Control (RBAC)
-The system automatically routes users to their specific dashboard upon login based on their role:
-1. **Student**: Applies to jobs, submits internship forms, requests documents.
-2. **Mentor**: Approves tier-1 document requests, guides a specific batch of students.
-3. **HOD (Head of Department)**: Approves tier-2 document requests, oversees department placements.
-4. **Dean (Dean / Director)**: Final approver for documents (triggers PDF generation).
-5. **Internal Guide**: Tracks and approves 8th-semester internship weekly logs for assigned students.
-6. **Recruiter**: Posts jobs, reviews applications, schedules interviews, and hires students.
-7. **Placement Cell / Admin**: Oversees the entire university statistics, manages all users and jobs.
+### Mentor
+- first-level review for student workflows
+- mentor-level approvals in document chains
 
-### B. Job Application Workflow
-1. **Posting**: Recruiter posts a new Job/Internship opportunity.
-2. **Matching**: Students see an "Opportunity Hub" where AI suggests best-matched jobs based on their parsed resume.
-3. **Application**: Student applies. Profile completeness (resume, CGPA) is validated before submission.
-4. **Tracking**: The application moves through statuses: `Applied` → `Shortlisted` → `Interview Scheduled` → `Selected` / `Rejected`.
-5. **Offer**: Upon selection, the student must upload their official **Offer Letter** (PDF) to the portal. This unlocks further features.
+### HOD
+- second-level document approvals
+- department-level tracking and exports
+- shared attendance report review
 
-### C. 8th Semester Internship Form & Weekly Logs Workflow
-1. **Form Submission**: An 8th-semester student fills out an Internship Form containing company details, location, role, and stipend.
-2. **Guide Assignment**: The system or HOD assigns an **Internal Guide** (faculty member) to the student.
-3. **Weekly Logs**: The student logs in weekly to submit "Weekly Logs" (tasks completed, hours worked).
-4. **Review**: The Internal Guide logs into their dashboard, views their assigned students, and approves or rejects the weekly logs, ensuring academic requirements are met while the student is in the industry.
+### Dean
+- final approval authority
+- final stage document issuance trigger
+- analytics and oversight visibility
 
-### D. Automated Document Generation Workflow (NOC / LOR / Bonafide)
-Instead of running from office to office, students request documents digitally:
-1. **Prerequisite**: The student MUST have uploaded an Offer Letter.
-2. **Request Submission**: Student requests a No Objection Certificate (NOC), Letter of Recommendation (LOR), or Bonafide Certificate. They fill in details like "Applying For" or "Mode of Work".
-3. **3-Tier Approval Flow**:
-   - **Step 1 - Mentor Approval**: Student's mentor reviews and approves.
-   - **Step 2 - HOD Approval**: Passes to the HOD's dashboard for approval.
-   - **Step 3 - Dean Approval**: Passes to the Dean's dashboard.
-4. **PDF Generation**: When the Dean clicks "Approve", the backend dynamically injects the student's data (Name, Enrollment No, Company, CGPA) into a `.hbs` (Handlebars) template, converts it to a PDF using `html-pdf`, and saves it locally.
-5. **Download**: The document status changes to `Issued` on the student dashboard, and a secure download link appears, allowing the student to fetch the official PDF instantly.
+### Recruiter / Placement Cell
+- job posting and application processing
+- interview scheduling and status progression
+- broad operational controls and broadcasting
 
----
+## 5. System Architecture
+## 5.1 Frontend
+- React (single-page application)
+- React Router for role-based navigation
+- Axios for API communication
+- Lucide React icons and utility-first styling patterns
 
-## 5. Architectural Summary
-- **Stateless Architecture**: The backend uses JWTs for stateless auth, meaning the server pairs well with the React frontend and can be scaled easily.
-- **RESTful APIs**: Organized purely by feature routes (`/api/jobs`, `/api/applications`, `/api/documents`, `/api/profile`).
-- **Data Validation & Security**: Front-end validates form completeness (preventing document requests without offer letters, or applications without resumes) while the back-end robustly validates inputs before performing CRUD operations or executing PDF generations.
+## 5.2 Backend
+- Node.js + Express REST API
+- MongoDB + Mongoose models
+- JWT authentication and role authorization middleware
+- Multer + Cloudinary for file uploads
+
+## 5.3 Document Services
+- Handlebars templates for document rendering
+- html-pdf / pdfkit based PDF generation
+- generated document links persisted for user download
+
+## 5.4 AI Integration
+- optional recommendation microservice endpoint
+- if AI ranker fails, system returns unranked jobs as safe fallback
+
+## 6. Core Workflows
+## 6.1 Job Lifecycle
+1. Recruiter posts job.
+2. Student views recommended jobs.
+3. Student applies.
+4. Application status progresses through recruiter decisions.
+5. Interview scheduling and updates are managed through the application pipeline.
+
+## 6.2 Internship and Weekly Logs
+1. Student submits internship form.
+2. Internal guide assignment is attached.
+3. Student submits weekly logs.
+4. Internal guide reviews and marks status.
+5. Progress tracking is reflected in student dashboard metrics.
+
+## 6.3 Document Approval Chain
+1. Student requests document (NOC/LOR/Bonafide).
+2. Mentor approval.
+3. HOD approval.
+4. Dean approval.
+5. On final approval, backend generates document PDF and marks it issued.
+6. Student downloads issued document from dashboard.
+
+## 6.4 Shared Attendance Reports
+- Internal Guide can share attendance snapshots.
+- HOD and Dean consume these reports with detail views and filters.
+
+## 7. Current Feature Highlights
+- role-specific dashboards (Student, Internal Guide, Mentor, HOD, Dean, Recruiter, Placement Cell)
+- document approval chain with issuance state transitions
+- shared report visibility for leadership roles
+- student tracking enhancements (internship timeline and log completion insights)
+- submission history management with delete support for student-owned records
+- notification improvements including unread counts and read/unread filtering
+- centralized role constants for cleaner permission management in key routes
+
+## 8. Technology Stack
+### Frontend
+- react
+- react-router-dom
+- axios
+- lucide-react
+
+### Backend
+- express
+- mongoose
+- jsonwebtoken
+- multer
+- cloudinary
+- handlebars
+- html-pdf
+- pdfkit
+
+## 9. API Modules
+- /api/auth
+- /api/profile
+- /api/jobs
+- /api/applications
+- /api/documents
+- /api/internship-forms
+- /api/logs
+- /api/notifications
+- /api/review-schedule
+
+## 10. Setup and Run Guide
+## 10.1 Prerequisites
+- Node.js LTS
+- MongoDB instance (local or hosted)
+- Cloudinary account for file workflows
+- optional AI recommendation service
+
+## 10.2 Backend Setup
+1. Open backend folder.
+2. Install dependencies.
+3. Create .env from backend/.env.example.
+4. Fill required configuration values.
+5. Start server.
+
+Commands:
+- npm install
+- npm run dev
+
+## 10.3 Frontend Setup
+1. Open frontend folder.
+2. Install dependencies.
+3. Start client.
+
+Commands:
+- npm install
+- npm start
+
+## 10.4 Build
+- frontend: npm run build
+
+## 11. Environment Configuration
+Primary backend values include:
+- PORT
+- MONGODB_URI
+- JWT_SECRET
+- JWT_EXPIRES_IN
+- CLOUDINARY_NAME
+- CLOUDINARY_API_KEY
+- CLOUDINARY_API_SECRET
+- INSTITUTION_NAME
+- INSTITUTION_ADDRESS
+- INSTITUTION_PHONE
+- INSTITUTION_EMAIL
+- AI service URL variable
+
+Note: keep AI endpoint naming consistent across environment and controller references.
+
+## 12. Operational Notes
+- If AI recommendation fails, jobs are still delivered without ranking.
+- Route or controller updates require backend restart.
+- Frontend can compile with existing non-blocking lint warnings.
+
+## 13. Security and Governance
+- authenticated access via JWT
+- role-based authorization per endpoint
+- ownership checks for student-scoped destructive actions
+- controlled approval chains for official documents
+
+## 14. Known Risks and Improvement Backlog
+- standardize API validation across all modules
+- add comprehensive automated test coverage
+- implement CI pipelines for lint, build, and test gates
+- unify AI service health-check and failure telemetry
+- complete lint warning cleanup for long-term maintainability
+
+## 15. Conclusion
+Streamlining Success is production-oriented in architecture and workflow coverage. It already supports the major university placement and internship operations with role-based accountability and process automation. With testing and CI hardening, it can be elevated to enterprise-grade reliability.

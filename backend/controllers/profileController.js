@@ -29,6 +29,14 @@ const updateProfile = async (req, res) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     });
 
+    // Guard against accidental resume URL wipes from empty-string payloads.
+    if (typeof updates.resumeUrl === 'string' && !updates.resumeUrl.trim()) {
+      delete updates.resumeUrl;
+      if (typeof updates.resumeName === 'string' && updates.resumeName.trim()) {
+        delete updates.resumeName;
+      }
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
       updates,

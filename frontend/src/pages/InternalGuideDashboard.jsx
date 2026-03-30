@@ -445,10 +445,9 @@ const InternalGuideDashboard = () => {
           {/* DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
-              <div className="rounded-3xl bg-gradient-to-r from-indigo-900 via-blue-900 to-cyan-800 p-7 text-white shadow-xl">
-                <p className="text-xs uppercase tracking-wider font-semibold text-indigo-200">Guide Control Panel</p>
-                <h2 className="text-3xl md:text-4xl font-black mt-2">Internal Guide Dashboard</h2>
-                <p className="text-sm text-indigo-100 mt-2">Track student engagement, weekly logs and attendance health in one place.</p>
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Internal Guide Dashboard</h2>
+                <p className="text-sm text-slate-600 mt-1">Track student engagement, weekly logs and attendance in one place.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
