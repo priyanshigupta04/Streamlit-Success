@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Dictionary - Streamlit Success</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      margin: 28px;
+      color: #1f2937;
+      line-height: 1.35;
+      font-size: 12px;
+    }
+    h1 {
+      margin: 0 0 6px 0;
+      color: #0b3a66;
+      font-size: 24px;
+    }
+    h2 {
+      margin: 20px 0 8px 0;
+      color: #0f4c81;
+      font-size: 17px;
+      border-bottom: 1px solid #d9e2ec;
+      padding-bottom: 4px;
+    }
+    .meta {
+      margin: 0 0 10px 0;
+      color: #4b5563;
+      font-size: 11px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      table-layout: fixed;
+      word-wrap: break-word;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 7px;
+      vertical-align: top;
+    }
+    th {
+      background: #e8f1fb;
+      color: #0f3557;
+      font-weight: 600;
+      text-align: left;
+    }
+    .small {
+      font-size: 11px;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    @page {
+      size: A4;
+      margin: 14mm;
+    }
+  </style>
+</head>
+<body>
+  <h1>Data Dictionary</h1>
+  <p class="meta">Project: Streamlit Success | Database: MongoDB (Mongoose) | Date: 30-Mar-2026</p>
+
+  <h2>USER (Master Collection)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Field Name</th>
+        <th>Data Type</th>
+        <th>Constraint/Key</th>
+        <th>Description</th>
+        <th>Links To</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Unique user id</td><td>-</td></tr>
+      <tr><td>name</td><td>String</td><td>Required</td><td>User full name</td><td>-</td></tr>
+      <tr><td>email</td><td>String</td><td>Required, Unique</td><td>Login email</td><td>-</td></tr>
+      <tr><td>password</td><td>String</td><td>Required</td><td>Hashed password</td><td>-</td></tr>
+      <tr><td>role</td><td>Enum</td><td>Required</td><td>student, recruiter, mentor, internal_guide, placement_cell, hod, dean</td><td>-</td></tr>
+      <tr><td>department</td><td>String</td><td>Optional</td><td>Department name</td><td>-</td></tr>
+      <tr><td>branch</td><td>String</td><td>Optional</td><td>Student branch</td><td>-</td></tr>
+      <tr><td>year</td><td>Number</td><td>Optional</td><td>Academic year</td><td>-</td></tr>
+      <tr><td>semester</td><td>Number</td><td>Optional</td><td>Semester</td><td>-</td></tr>
+      <tr><td>cgpa</td><td>String</td><td>Optional</td><td>CGPA</td><td>-</td></tr>
+      <tr><td>skills</td><td>Mixed</td><td>Default empty</td><td>Skills profile</td><td>-</td></tr>
+      <tr><td>resumeUrl</td><td>String</td><td>Optional</td><td>Resume file URL</td><td>-</td></tr>
+      <tr><td>resumeText</td><td>String</td><td>Optional</td><td>Parsed resume text</td><td>-</td></tr>
+      <tr><td>offerLetterUrl</td><td>String</td><td>Optional</td><td>Offer letter URL</td><td>-</td></tr>
+      <tr><td>enrollmentNo</td><td>String</td><td>Optional</td><td>Enrollment number</td><td>-</td></tr>
+      <tr><td>mentorId</td><td>ObjectId</td><td>FK Optional</td><td>Assigned mentor</td><td>USER._id</td></tr>
+      <tr><td>guideId</td><td>ObjectId</td><td>FK Optional</td><td>Assigned internal guide</td><td>USER._id</td></tr>
+      <tr><td>companyName</td><td>String</td><td>Optional</td><td>Recruiter company name</td><td>-</td></tr>
+      <tr><td>companyIndustry</td><td>String</td><td>Optional</td><td>Recruiter industry</td><td>-</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>JOB</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Job id</td><td>-</td></tr>
+      <tr><td>title</td><td>String</td><td>Required</td><td>Job title</td><td>-</td></tr>
+      <tr><td>company</td><td>String</td><td>Required</td><td>Company name</td><td>-</td></tr>
+      <tr><td>postedBy</td><td>ObjectId</td><td>Required FK</td><td>Job posted by recruiter/admin</td><td>USER._id</td></tr>
+      <tr><td>type</td><td>Enum</td><td>Default internship</td><td>internship, fulltime, parttime</td><td>-</td></tr>
+      <tr><td>description</td><td>String</td><td>Required</td><td>Job description</td><td>-</td></tr>
+      <tr><td>requiredSkills</td><td>Array[String]</td><td>Optional</td><td>Required skill list</td><td>-</td></tr>
+      <tr><td>deadline</td><td>Date</td><td>Optional</td><td>Application deadline</td><td>-</td></tr>
+      <tr><td>status</td><td>Enum</td><td>Default open</td><td>open, closed</td><td>-</td></tr>
+      <tr><td>approvalStatus</td><td>Enum</td><td>Default pending</td><td>pending, approved, rejected</td><td>-</td></tr>
+      <tr><td>approvedBy</td><td>ObjectId</td><td>FK Optional</td><td>Approver user id</td><td>USER._id</td></tr>
+      <tr><td>shortlistedStudents</td><td>Array[ObjectId]</td><td>FK Array</td><td>Shortlisted student ids</td><td>USER._id</td></tr>
+      <tr><td>selectedStudents</td><td>Array[ObjectId]</td><td>FK Array</td><td>Selected student ids</td><td>USER._id</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>APPLICATION</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Application id</td><td>-</td></tr>
+      <tr><td>studentId</td><td>ObjectId</td><td>Required FK</td><td>Applicant student</td><td>USER._id</td></tr>
+      <tr><td>jobId</td><td>ObjectId</td><td>FK Optional</td><td>Related job</td><td>JOB._id</td></tr>
+      <tr><td>status</td><td>Enum</td><td>Default applied</td><td>Application lifecycle status</td><td>-</td></tr>
+      <tr><td>matchScore</td><td>Number</td><td>Optional</td><td>Resume-job score</td><td>-</td></tr>
+      <tr><td>resumeUrl</td><td>String</td><td>Optional</td><td>Resume at apply time</td><td>-</td></tr>
+      <tr><td>offerLetterUrl</td><td>String</td><td>Optional</td><td>Offer letter URL</td><td>-</td></tr>
+      <tr><td>joiningDate</td><td>Date</td><td>Optional</td><td>Joining date</td><td>-</td></tr>
+      <tr><td>joiningStatus</td><td>Enum</td><td>Default pending</td><td>pending, joined, deferred, unknown</td><td>-</td></tr>
+      <tr><td>workMode</td><td>Enum</td><td>Optional</td><td>onsite, hybrid, remote</td><td>-</td></tr>
+      <tr><td>mentorApproval.status</td><td>Enum</td><td>Default pending</td><td>Mentor approval state</td><td>-</td></tr>
+      <tr><td>interviewScheduledBy</td><td>ObjectId</td><td>FK Optional</td><td>Scheduler user</td><td>USER._id</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>INTERNSHIP_FORM</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Form id</td><td>-</td></tr>
+      <tr><td>student</td><td>ObjectId</td><td>Required FK</td><td>Student user</td><td>USER._id</td></tr>
+      <tr><td>department</td><td>String</td><td>Required</td><td>Student department</td><td>-</td></tr>
+      <tr><td>mentor</td><td>ObjectId</td><td>FK Optional</td><td>Assigned mentor</td><td>USER._id</td></tr>
+      <tr><td>companyName</td><td>String</td><td>Required</td><td>Internship company</td><td>-</td></tr>
+      <tr><td>role</td><td>String</td><td>Required</td><td>Internship role</td><td>-</td></tr>
+      <tr><td>stipend</td><td>String</td><td>Required</td><td>Stipend text</td><td>-</td></tr>
+      <tr><td>joiningDate</td><td>Date</td><td>Required</td><td>Joining date</td><td>-</td></tr>
+      <tr><td>status</td><td>Enum</td><td>Default pending</td><td>pending, approved, rejected</td><td>-</td></tr>
+      <tr><td>internalGuide</td><td>ObjectId</td><td>FK Optional</td><td>Assigned internal guide</td><td>USER._id</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>WEEKLY_LOG</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Weekly log id</td><td>-</td></tr>
+      <tr><td>studentId</td><td>ObjectId</td><td>Required FK</td><td>Student owner</td><td>USER._id</td></tr>
+      <tr><td>guideId</td><td>ObjectId</td><td>FK Optional</td><td>Reviewing guide</td><td>USER._id</td></tr>
+      <tr><td>weekNumber</td><td>Number</td><td>Required</td><td>Week sequence</td><td>-</td></tr>
+      <tr><td>logText</td><td>String</td><td>Required</td><td>Weekly work details</td><td>-</td></tr>
+      <tr><td>status</td><td>Enum</td><td>Default submitted</td><td>submitted, under_review, approved, needs_revision</td><td>-</td></tr>
+      <tr><td>reviewedAt</td><td>Date</td><td>Optional</td><td>Review timestamp</td><td>-</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+  <h2>DOCUMENT_REQUEST</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Document request id</td><td>-</td></tr>
+      <tr><td>studentId</td><td>ObjectId</td><td>Required FK</td><td>Requesting student</td><td>USER._id</td></tr>
+      <tr><td>type</td><td>Enum</td><td>Required</td><td>noc, bonafide, completion_certificate, experience_letter, custom</td><td>-</td></tr>
+      <tr><td>jobId</td><td>ObjectId</td><td>FK Optional</td><td>Related job</td><td>JOB._id</td></tr>
+      <tr><td>mentorApproval.by</td><td>ObjectId</td><td>FK Optional</td><td>Mentor approver</td><td>USER._id</td></tr>
+      <tr><td>hodApproval.by</td><td>ObjectId</td><td>FK Optional</td><td>HOD approver</td><td>USER._id</td></tr>
+      <tr><td>deanApproval.by</td><td>ObjectId</td><td>FK Optional</td><td>Dean approver</td><td>USER._id</td></tr>
+      <tr><td>overallStatus</td><td>Enum</td><td>Default pending</td><td>pending, mentor_approved, hod_approved, issued, rejected</td><td>-</td></tr>
+      <tr><td>generatedDocUrl</td><td>String</td><td>Optional</td><td>Generated document URL</td><td>-</td></tr>
+      <tr><td>issueDate</td><td>Date</td><td>Optional</td><td>Issue date</td><td>-</td></tr>
+      <tr><td>expiryDate</td><td>Date</td><td>Optional</td><td>Expiry date</td><td>-</td></tr>
+      <tr><td>documentVersion</td><td>Number</td><td>Default 0</td><td>Revision number</td><td>-</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>NOTIFICATION</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Notification id</td><td>-</td></tr>
+      <tr><td>userId</td><td>ObjectId</td><td>Required FK</td><td>Receiver user</td><td>USER._id</td></tr>
+      <tr><td>type</td><td>Enum</td><td>Optional</td><td>application_status, document_status, interview_scheduled, log_reviewed, offer_received, announcement</td><td>-</td></tr>
+      <tr><td>message</td><td>String</td><td>Required</td><td>Notification message body</td><td>-</td></tr>
+      <tr><td>read</td><td>Boolean</td><td>Default false</td><td>Read/unread state</td><td>-</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>REVIEW_ATTENDANCE</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Attendance record id</td><td>-</td></tr>
+      <tr><td>guideId</td><td>ObjectId</td><td>Required FK</td><td>Guide taking review</td><td>USER._id</td></tr>
+      <tr><td>studentId</td><td>ObjectId</td><td>Required FK</td><td>Student marked</td><td>USER._id</td></tr>
+      <tr><td>reviewDate</td><td>Date</td><td>Required</td><td>Review day</td><td>-</td></tr>
+      <tr><td>status</td><td>Enum</td><td>Required</td><td>present, absent</td><td>-</td></tr>
+      <tr><td>note</td><td>String</td><td>Default empty</td><td>Extra note</td><td>-</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>SHARED_REPORT</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Shared report id</td><td>-</td></tr>
+      <tr><td>sharedBy</td><td>ObjectId</td><td>Required FK</td><td>Report shared by</td><td>USER._id</td></tr>
+      <tr><td>reportType</td><td>Enum</td><td>Default attendance</td><td>Current supported type attendance</td><td>-</td></tr>
+      <tr><td>filterMode</td><td>Enum</td><td>Default single</td><td>single, all</td><td>-</td></tr>
+      <tr><td>summary.total</td><td>Number</td><td>Default 0</td><td>Total count</td><td>-</td></tr>
+      <tr><td>summary.present</td><td>Number</td><td>Default 0</td><td>Present count</td><td>-</td></tr>
+      <tr><td>summary.absent</td><td>Number</td><td>Default 0</td><td>Absent count</td><td>-</td></tr>
+      <tr><td>attendanceDetails.studentId</td><td>ObjectId</td><td>FK Optional</td><td>Student in report line</td><td>USER._id</td></tr>
+      <tr><td>sharedWith</td><td>Array[ObjectId]</td><td>FK Array</td><td>Report recipients</td><td>USER._id</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>DEPARTMENT_MENTOR</h2>
+  <table>
+    <thead>
+      <tr><th>Field Name</th><th>Data Type</th><th>Constraint/Key</th><th>Description</th><th>Links To</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>_id</td><td>ObjectId</td><td>PK</td><td>Mapping id</td><td>-</td></tr>
+      <tr><td>department</td><td>Enum</td><td>Required, Unique</td><td>SOCSET, SOTE, SOB, SAAD</td><td>-</td></tr>
+      <tr><td>mentorName</td><td>String</td><td>Required</td><td>Mentor name snapshot</td><td>-</td></tr>
+      <tr><td>mentorEmail</td><td>String</td><td>Required</td><td>Mentor email snapshot</td><td>-</td></tr>
+      <tr><td>mentorId</td><td>ObjectId</td><td>FK Optional</td><td>Assigned mentor user</td><td>USER._id</td></tr>
+      <tr><td>assignedBy</td><td>ObjectId</td><td>Required FK</td><td>Authority who assigned</td><td>USER._id</td></tr>
+      <tr><td>assignedAt</td><td>Date</td><td>Default now</td><td>Assignment time</td><td>-</td></tr>
+      <tr><td>createdAt</td><td>Date</td><td>Auto</td><td>Record created time</td><td>-</td></tr>
+      <tr><td>updatedAt</td><td>Date</td><td>Auto</td><td>Record updated time</td><td>-</td></tr>
+    </tbody>
+  </table>
+
+  <p class="small">Note: This dictionary is derived from Mongoose schemas used in backend models.</p>
+</body>
+</html>

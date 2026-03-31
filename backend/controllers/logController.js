@@ -3,6 +3,14 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 const InternshipForm = require("../models/InternshipForm");
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 // POST /api/logs — student submits a log
 exports.createLog = async (req, res) => {
   try {
@@ -40,7 +48,8 @@ exports.createLog = async (req, res) => {
         'log_reviewed',
         'New Weekly Log Submitted',
         `${student.name} submitted Week ${weekNumber} log. Please review it in Weekly Logs section.`,
-        '/internal-guide-dashboard'
+        '/internal-guide-dashboard',
+        buildSenderMeta(req)
       );
     }
 
@@ -104,7 +113,8 @@ exports.reviewLog = async (req, res) => {
     await Notification.send(
       log.studentId, 'log_reviewed',
       'Log Review', msgs[status],
-      '/student-dashboard'
+      '/student-dashboard',
+      buildSenderMeta(req)
     );
 
     res.json({ log });
@@ -142,7 +152,8 @@ exports.sendLogReminder = async (req, res) => {
           'announcement',
           'Weekly Log Reminder',
           `${guideName} requested you to submit/update your weekly log. Please submit it from your dashboard.`,
-          '/student-dashboard'
+          '/student-dashboard',
+          buildSenderMeta(req)
         )
       )
     );

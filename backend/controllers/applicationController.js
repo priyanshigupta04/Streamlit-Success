@@ -3,6 +3,14 @@ const Job = require("../models/Job");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 // POST /api/jobs/:jobId/apply — student applies
 exports.applyToJob = async (req, res) => {
   try {
@@ -37,7 +45,8 @@ exports.applyToJob = async (req, res) => {
       job.postedBy, 'application_status',
       '📩 New Application Received',
       `${student?.name || 'A student'} has applied for the role of ${job.title} at ${job.company}${job.location ? ` (${job.location})` : ''}. Review their profile on your dashboard.`,
-      `/recruiter-dashboard`
+      `/recruiter-dashboard`,
+      buildSenderMeta(req)
     );
 
     // Notify mentor if student has one
@@ -46,7 +55,8 @@ exports.applyToJob = async (req, res) => {
         student.mentorId, 'application_status',
         '📋 Student Applied for a Job',
         `Your student ${student?.name || 'A student'} has applied for ${job.title} at ${job.company}${job.location ? ` (${job.location})` : ''}. Please review and approve/reject from your Mentor Dashboard.`,
-        `/mentor-dashboard`
+        `/mentor-dashboard`,
+        buildSenderMeta(req)
       );
     }
 
@@ -225,7 +235,8 @@ exports.quickApply = async (req, res) => {
       await Notification.send(
         student.mentorId, 'application_status',
         'Student Application', `${student?.name || 'A student'} has applied for ${jobTitle} at ${company}`,
-        `/mentor-dashboard`
+        `/mentor-dashboard`,
+        buildSenderMeta(req)
       );
     }
 
@@ -323,7 +334,8 @@ exports.updateApplicationStatus = async (req, res) => {
         app.studentId, 'application_status',
         statusTitles[status] || 'Application Update',
         statusMessages[status],
-        '/student-dashboard'
+        '/student-dashboard',
+        buildSenderMeta(req)
       );
     }
 
@@ -358,7 +370,8 @@ exports.mentorApproveApplication = async (req, res) => {
       app.studentId._id, 'application_status',
       'Application Approved by Mentor', 
       `Your mentor has approved your application for ${jobTitle}. It will now be forwarded to the recruiter.`,
-      '/student-dashboard'
+      '/student-dashboard',
+      buildSenderMeta(req)
     );
 
     res.json({ 
@@ -396,7 +409,8 @@ exports.mentorRejectApplication = async (req, res) => {
       app.studentId._id, 'application_status',
       'Application Rejected by Mentor', 
       `Your mentor has rejected your application for ${jobTitle}. Reason: ${mentorNote || 'No reason provided.'}`,
-      '/student-dashboard'
+      '/student-dashboard',
+      buildSenderMeta(req)
     );
 
     res.json({ 
@@ -454,7 +468,8 @@ exports.scheduleInterview = async (req, res) => {
       'application_status',
       '📅 Interview Scheduled',
       `Your interview for ${jobTitle} at ${company} is scheduled on ${date} at ${time}. ${meetingLink ? `Join here: ${meetingLink}` : ""}`,
-      '/student-dashboard'
+      '/student-dashboard',
+      buildSenderMeta(req)
     );
 
     // Notify mentor (if exists)
@@ -465,7 +480,8 @@ exports.scheduleInterview = async (req, res) => {
         'application_status',
         '📅 Student Interview Scheduled',
         `${student.name}'s interview for ${jobTitle} ${company ? `at ${company}` : ''} is scheduled on ${date} at ${time}.`,
-        '/mentor-dashboard'
+        '/mentor-dashboard',
+        buildSenderMeta(req)
       );
     }
 

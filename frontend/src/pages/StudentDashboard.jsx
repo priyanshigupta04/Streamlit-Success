@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import axios from "../api/axios";
@@ -15,10 +15,12 @@ import {
 const StudentDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const aiRetryTimerRef = useRef(null);
   const [showModal, setShowModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard'); 
+  const [showAiDrawer, setShowAiDrawer] = useState(false);
   const [docFormData, setDocFormData] = useState({
   orgName: '',
   role: '',
@@ -60,6 +62,14 @@ const StudentDashboard = () => {
       setProgressNow(Date.now());
     }, 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (aiRetryTimerRef.current) {
+        clearTimeout(aiRetryTimerRef.current);
+      }
+    };
   }, []);
 
   const fetchInternshipForms = async () => {
@@ -183,8 +193,13 @@ const StudentDashboard = () => {
     fetchDocuments(); // Load document requests on mount
   }, []);
 
-  const fetchJobs = async () => {
+  const fetchJobs = async (retryAttempt = 0) => {
     try {
+      if (aiRetryTimerRef.current) {
+        clearTimeout(aiRetryTimerRef.current);
+        aiRetryTimerRef.current = null;
+      }
+
       const res = await axios.get('/api/jobs/recommended');
       const mapped = (res.data.jobs || []).map(j => ({
         id: j._id,
@@ -211,9 +226,29 @@ const StudentDashboard = () => {
       if (res.data.ai?.analysis) {
         setAiAnalysis(res.data.ai.analysis);
       }
-      setAiMeta(res.data.ai?.meta || null);
+      const nextMeta = res.data.ai?.meta || null;
+      setAiMeta(nextMeta);
+
+      const recommendationStatus = nextMeta?.serviceStatus?.recommendation;
+      const warnings = nextMeta?.warnings || [];
+      const transientAiFailure = warnings.some((w) =>
+        /(service unavailable|timeout|timed out|ECONNREFUSED|ETIMEDOUT|502)/i.test(String(w || ''))
+      );
+
+      if (recommendationStatus === 'fallback' && transientAiFailure && retryAttempt < 3) {
+        const delayMs = 4000 * (retryAttempt + 1);
+        aiRetryTimerRef.current = setTimeout(() => {
+          fetchJobs(retryAttempt + 1);
+        }, delayMs);
+      }
     } catch (err) {
       console.error('Failed to load recommended jobs', err);
+      if (retryAttempt < 3) {
+        const delayMs = 4000 * (retryAttempt + 1);
+        aiRetryTimerRef.current = setTimeout(() => {
+          fetchJobs(retryAttempt + 1);
+        }, delayMs);
+      }
     }
   };
 
@@ -795,58 +830,24 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
       {/* TAB 1: DASHBOARD */}
       {activeTab === 'dashboard' && (
         <div className="space-y-8 fade-in">
-          {(aiMeta || aiAnalysis) && (
-            <div className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">AI Recommendation Engine</p>
-                  <h4 className="text-lg font-black italic uppercase tracking-tight mt-1">Profile Driven Matching</h4>
-                </div>
-                {aiMeta?.serviceStatus && (
-                  <div className="flex flex-wrap gap-2 text-[9px] font-black uppercase">
-                    <span className={`px-2 py-1 rounded-full ${aiMeta.serviceStatus.analysis === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                      Analysis: {normalizeAiStatusLabel(aiMeta.serviceStatus.analysis, 'analysis')}
-                    </span>
-                    <span className={`px-2 py-1 rounded-full ${aiMeta.serviceStatus.recommendation === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                      Ranking: {normalizeAiStatusLabel(aiMeta.serviceStatus.recommendation, 'recommendation')}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                  <p className="text-[9px] font-black uppercase text-slate-400">Resume Source</p>
-                  <p className="text-sm font-bold mt-1">{aiMeta?.resumeSource || 'unknown'}</p>
-                </div>
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                  <p className="text-[9px] font-black uppercase text-slate-400">Profile Completeness</p>
-                  <p className="text-sm font-bold mt-1">{aiMeta?.profileCompleteness ?? 'N/A'}%</p>
-                </div>
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                  <p className="text-[9px] font-black uppercase text-slate-400">Predicted Domain</p>
-                  <p className="text-sm font-bold mt-1">{aiAnalysis?.domain || 'Not available'}</p>
-                </div>
-              </div>
-
-              {visibleAiWarnings.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {visibleAiWarnings.map((warning, idx) => (
-                    <p key={idx} className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                      {warning}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="flex justify-between items-end px-4">
             <div>
               <h3 className="text-3xl font-black tracking-tight mb-1 italic uppercase">Opportunity Hub</h3>
               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Verified Roles</p>
             </div>
-            <Filter size={20} className="text-slate-300" />
+            <div className="flex items-center gap-3">
+              {(aiMeta || aiAnalysis) && (
+                <button
+                  type="button"
+                  onClick={() => setShowAiDrawer(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-black hover:text-black transition-all"
+                >
+                  <Zap size={14} />
+                  AI Insights
+                </button>
+              )}
+              <Filter size={20} className="text-slate-300" />
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {filteredJobs.map(job => (
@@ -1293,6 +1294,64 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
       )}
     </div> {/* Main Content Area Close */}
   </div> {/* Grid Wrapper Close */}
+
+  {showAiDrawer && (
+    <div className="fixed inset-0 z-[105]">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowAiDrawer(false)}></div>
+      <aside className="absolute right-0 top-0 h-full w-full max-w-xl bg-white border-l border-slate-200 shadow-2xl p-6 overflow-y-auto">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">AI Recommendation Engine</p>
+            <h4 className="text-lg font-black italic uppercase tracking-tight mt-1">Profile Driven Matching</h4>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAiDrawer(false)}
+            className="p-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+            aria-label="Close AI insights"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {aiMeta?.serviceStatus && (
+          <div className="flex flex-wrap gap-2 text-[9px] font-black uppercase mb-4">
+            <span className={`px-2 py-1 rounded-full ${aiMeta.serviceStatus.analysis === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              Analysis: {normalizeAiStatusLabel(aiMeta.serviceStatus.analysis, 'analysis')}
+            </span>
+            <span className={`px-2 py-1 rounded-full ${aiMeta.serviceStatus.recommendation === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              Ranking: {normalizeAiStatusLabel(aiMeta.serviceStatus.recommendation, 'recommendation')}
+            </span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <p className="text-[9px] font-black uppercase text-slate-400">Resume Source</p>
+            <p className="text-sm font-bold mt-1">{aiMeta?.resumeSource || 'unknown'}</p>
+          </div>
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <p className="text-[9px] font-black uppercase text-slate-400">Profile Completeness</p>
+            <p className="text-sm font-bold mt-1">{aiMeta?.profileCompleteness ?? 'N/A'}%</p>
+          </div>
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <p className="text-[9px] font-black uppercase text-slate-400">Predicted Domain</p>
+            <p className="text-sm font-bold mt-1">{aiAnalysis?.domain || 'Not available'}</p>
+          </div>
+        </div>
+
+        {visibleAiWarnings.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {visibleAiWarnings.map((warning, idx) => (
+              <p key={idx} className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                {warning}
+              </p>
+            ))}
+          </div>
+        )}
+      </aside>
+    </div>
+  )}
 
   {/* MODALS (Placed outside the grid for clean rendering) */}
   {activeDocType && (

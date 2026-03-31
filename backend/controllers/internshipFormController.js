@@ -2,6 +2,14 @@ const InternshipForm = require("../models/InternshipForm");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 // @desc    Submit internship form
 // @route   POST /api/internship-forms
 // @access  Private (Student only)
@@ -40,7 +48,8 @@ const submitForm = async (req, res) => {
         'announcement',
         'New Internship Form Submitted',
         `${studentName} submitted an internship form for ${companyName} (${role}). Please review it from Mentor Dashboard.`,
-        '/mentor-dashboard'
+        '/mentor-dashboard',
+        buildSenderMeta(req)
       );
     }
 
@@ -51,7 +60,10 @@ const submitForm = async (req, res) => {
         type: 'announcement',
         title: 'New Internship Form Submitted',
         message: `${studentName} submitted an internship form for ${companyName} (${role}).`,
-        link: '/placement-cell-dashboard'
+        link: '/placement-cell-dashboard',
+        senderId: req.user?._id || null,
+        senderName: req.user?.name || studentName,
+        senderRole: req.user?.role || 'student',
       }));
       await Notification.insertMany(placementNotifications);
     }
@@ -167,7 +179,8 @@ const approveForm = async (req, res) => {
         'announcement',
         'Internal Guide Assigned',
         `Your internship form for ${updatedForm.companyName} (${updatedForm.role}) was approved. Internal guide assigned: ${guideInfo}.`,
-        '/student-dashboard'
+        '/student-dashboard',
+        buildSenderMeta(req)
       );
     }
 
@@ -179,7 +192,8 @@ const approveForm = async (req, res) => {
         'announcement',
         'New Student Assigned',
         `${studentName} has been assigned to you as internal-guide for internship monitoring.`,
-        '/internal-guide-dashboard'
+        '/internal-guide-dashboard',
+        buildSenderMeta(req)
       );
     }
 

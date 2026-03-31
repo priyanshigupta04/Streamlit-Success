@@ -12,6 +12,14 @@ const {
   getMyScheduledInterviews, deleteMyApplication
 } = require("../controllers/applicationController");
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 router.post("/quick",        protect, authorize(ROLES.STUDENT),                          quickApply);
 router.post("/:jobId/apply", protect, authorize(ROLES.STUDENT),                          applyToJob);
 router.post("/",             protect, authorize(ROLES.STUDENT),                          applyToJob);
@@ -75,7 +83,8 @@ router.put("/:id/cancel-interview", protect, authorize(ROLES.RECRUITER, ROLES.PL
         "interview_scheduled",
         "Interview Cancelled",
         `Your interview for ${roleText} at ${companyText} has been cancelled. Recruiter will share updated schedule if rescheduled.`,
-        "/student/dashboard"
+        "/student/dashboard",
+        buildSenderMeta(req)
       );
     }
 
@@ -90,7 +99,8 @@ router.put("/:id/cancel-interview", protect, authorize(ROLES.RECRUITER, ROLES.PL
             "interview_scheduled",
             "Student Interview Cancelled",
             `An interview has been cancelled for a student in ${dept} (${roleText} at ${companyText}).`,
-            "/mentor/dashboard"
+            "/mentor/dashboard",
+            buildSenderMeta(req)
           )
         );
       await Promise.all(mentorNotifications);
@@ -140,7 +150,8 @@ router.put("/:id/reschedule-interview", protect, authorize(ROLES.RECRUITER, ROLE
         "interview_scheduled",
         "Interview Rescheduled",
         `Your interview for ${roleText} at ${companyText} has been rescheduled${interviewMeta ? ` (${interviewMeta})` : ""}.`,
-        "/student/dashboard"
+        "/student/dashboard",
+        buildSenderMeta(req)
       );
     }
 
@@ -155,7 +166,8 @@ router.put("/:id/reschedule-interview", protect, authorize(ROLES.RECRUITER, ROLE
             "interview_scheduled",
             "Student Interview Rescheduled",
             `An interview has been rescheduled for a student in ${dept} (${roleText} at ${companyText})${interviewMeta ? ` (${interviewMeta})` : ""}.`,
-            "/mentor/dashboard"
+            "/mentor/dashboard",
+            buildSenderMeta(req)
           )
         );
       await Promise.all(mentorNotifications);
@@ -213,7 +225,8 @@ router.put("/schedule-interview/:jobId", protect, authorize(ROLES.RECRUITER, ROL
           "interview_scheduled",
           "Interview Scheduled",
           `Your interview for ${roleText} at ${companyText} is scheduled${interviewMeta ? ` (${interviewMeta})` : ""}.`,
-          "/student/dashboard"
+          "/student/dashboard",
+          buildSenderMeta(req)
         );
       });
 
@@ -237,7 +250,8 @@ router.put("/schedule-interview/:jobId", protect, authorize(ROLES.RECRUITER, ROL
           "interview_scheduled",
           "Students Interview Scheduled",
           `Interviews have been scheduled for students in ${assignment.department}${interviewMeta ? ` (${interviewMeta})` : ""}.`,
-          "/mentor/dashboard"
+          "/mentor/dashboard",
+          buildSenderMeta(req)
         )
       );
 

@@ -3,6 +3,16 @@ const Notification = require("../models/Notification");
 const Application = require("../models/Application");
 const User = require("../models/User");
 
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
+
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 const normalizeSkillList = (skills) => {
   if (Array.isArray(skills)) return skills.map((s) => String(s).trim()).filter(Boolean);
   if (typeof skills === 'string') {
@@ -314,7 +324,7 @@ exports.approveJob = async (req, res) => {
     await job.save();
 
     // notify recruiter
-    await Notification.send(job.postedBy, 'announcement', 'Job Approved', `Your job "${job.title}" was approved and is now visible to students.`, `/jobs/${job._id}`);
+    await Notification.send(job.postedBy, 'announcement', 'Job Approved', `Your job "${job.title}" was approved and is now visible to students.`, `/jobs/${job._id}`, buildSenderMeta(req));
 
     res.json({ job });
   } catch (err) {
@@ -333,7 +343,7 @@ exports.rejectJob = async (req, res) => {
     await job.save();
 
     // notify recruiter with reason
-    await Notification.send(job.postedBy, 'announcement', 'Job Rejected', `Your job "${job.title}" was rejected. Reason: ${job.rejectionReason || 'No reason provided'}.`, `/jobs/${job._id}`);
+    await Notification.send(job.postedBy, 'announcement', 'Job Rejected', `Your job "${job.title}" was rejected. Reason: ${job.rejectionReason || 'No reason provided'}.`, `/jobs/${job._id}`, buildSenderMeta(req));
 
     res.json({ job });
   } catch (err) {
@@ -392,7 +402,7 @@ exports.getRecommendedJobs = async (req, res) => {
         const parseResponse = await axios.post(
           `${fastApiUrl}/parse-resume-url`,
           { resume_url: user.resumeUrl },
-          { timeout: 30000 }
+          { timeout: AI_TIMEOUT_MS }
         );
 
         const parsedFields = parseResponse.data?.fields || {};
@@ -445,7 +455,7 @@ exports.getRecommendedJobs = async (req, res) => {
       const analysisResponse = await axios.post(
         `${fastApiUrl}/analyze`,
         { resume_text: resumeText },
-        { timeout: 30000 }
+        { timeout: AI_TIMEOUT_MS }
       );
       analysis = analysisResponse.data || null;
       aiMeta.serviceStatus.analysis = 'ok';
@@ -463,7 +473,7 @@ exports.getRecommendedJobs = async (req, res) => {
         resume_text: resumeText,
         jobs: jobsPayload,
         profile_completeness: aiMeta.profileCompleteness,
-      }, { timeout: 30000 });
+      }, { timeout: AI_TIMEOUT_MS });
 
       rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
       if (rankedJobs.length > 0) {
@@ -480,7 +490,7 @@ exports.getRecommendedJobs = async (req, res) => {
         resume_text: resumeText,
         jobs: jobsPayload,
         profile_completeness: aiMeta.profileCompleteness,
-      }, { timeout: 30000 });
+      }, { timeout: AI_TIMEOUT_MS });
 
       rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
       if (rankedJobs.length > 0) {

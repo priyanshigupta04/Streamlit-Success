@@ -5,6 +5,14 @@ const { generateNoc, validateNocRequirements, getNocPreview, generateLor, genera
 const fs = require('fs');
 const path = require('path');
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 // POST /api/documents/request — student requests a document
 exports.requestDocument = async (req, res) => {
   try {
@@ -232,7 +240,7 @@ exports.approveDocument = async (req, res) => {
     
     if (message && doc.studentId) {
       await Notification.send(doc.studentId, 'document_status',
-        'Document Update', message, '/student-dashboard');
+        'Document Update', message, '/student-dashboard', buildSenderMeta(req));
     }
 
     res.json({ document: doc });

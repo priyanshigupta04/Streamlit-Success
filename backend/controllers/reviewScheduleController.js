@@ -4,6 +4,14 @@ const Notification = require('../models/Notification');
 const SharedReport = require('../models/SharedReport');
 const User = require('../models/User');
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 const normalizeReviewDate = (dateStr) => {
   const base = dateStr ? new Date(dateStr) : new Date();
   if (Number.isNaN(base.getTime())) return null;
@@ -209,7 +217,8 @@ exports.notifyReviewSchedule = async (req, res) => {
           'announcement',
           'Weekly Review Scheduled',
           `${guideName} has scheduled your weekly review on ${dateText}. Please be prepared and keep your updates ready.`,
-          '/student-dashboard'
+          '/student-dashboard',
+          buildSenderMeta(req)
         )
       )
     );
@@ -294,7 +303,8 @@ exports.shareAttendanceReport = async (req, res) => {
           'announcement',
           title,
           message,
-          '/dean-dashboard'
+          '/dean-dashboard',
+          buildSenderMeta(req)
         )
       )
     );
