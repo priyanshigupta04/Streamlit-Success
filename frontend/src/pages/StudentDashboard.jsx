@@ -641,6 +641,8 @@ const StudentDashboard = () => {
     return new Date(dateValue).toLocaleDateString();
   };
   const [jobs, setJobs] = useState([]);
+  const [selectedJobPreview, setSelectedJobPreview] = useState(null);
+  const [isApplyingFromPreview, setIsApplyingFromPreview] = useState(false);
   // IDs of jobs the student has already applied to
   const appliedJobIds = new Set(
     myApplications
@@ -660,14 +662,14 @@ const StudentDashboard = () => {
   if(!profile.resumeName || !profile.cgpa) {
     alert("Incomplete Profile: Please upload your Resume and enter CGPA first.");
     setShowModal(true); 
-    return;
+    return false;
   }
 
   // Double Apply check (local state) - use ID instead of title/company as company might not be fully loaded
   const alreadyApplied = myApplications.find(a => (a.jobId?._id === job.id || a.id === job.id) || (a.company === job.company && a.role === job.role));
   if (alreadyApplied) {
     alert("You have already applied for this role!");
-    return;
+    return false;
   }
 
   try {
@@ -677,10 +679,92 @@ const StudentDashboard = () => {
     alert('✓ Application submitted successfully!');
     // Refresh applications to get real IDs from backend
     setTimeout(() => fetchApplications(), 500);
+    return true;
   } catch (err) {
     const errorMsg = err.response?.data?.message || 'Failed to apply. Please try again.';
     alert('❌ ' + errorMsg);
+    return false;
   }
+};
+
+const handleOpenJobPreview = (job) => {
+  setSelectedJobPreview(job);
+};
+
+const handleApplyFromPreview = async () => {
+  if (!selectedJobPreview || isApplyingFromPreview) return;
+
+  try {
+    setIsApplyingFromPreview(true);
+    const isApplied = await handleApply(selectedJobPreview);
+    if (isApplied) {
+      setSelectedJobPreview(null);
+    }
+  } finally {
+    setIsApplyingFromPreview(false);
+  }
+};
+
+const getJobFieldText = (value) => {
+  if (Array.isArray(value)) {
+    const list = value.map((item) => String(item || '').trim()).filter(Boolean);
+    return list.length ? list.join(', ') : 'Not specified';
+  }
+  const text = String(value || '').trim();
+  return text || 'Not specified';
+};
+
+const formatJobDate = (dateValue) => {
+  if (!dateValue) return 'Not specified';
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return 'Not specified';
+  return parsed.toLocaleDateString();
+};
+
+const getCompanyTheme = (companyName) => {
+  const name = String(companyName || '').toLowerCase();
+
+  if (name.includes('google')) {
+    return {
+      chip: 'bg-blue-50 text-blue-700 border-blue-100',
+      avatar: 'bg-blue-600 text-white',
+    };
+  }
+  if (name.includes('microsoft')) {
+    return {
+      chip: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+      avatar: 'bg-cyan-600 text-white',
+    };
+  }
+  if (name.includes('amazon') || name.includes('aws')) {
+    return {
+      chip: 'bg-amber-50 text-amber-700 border-amber-100',
+      avatar: 'bg-amber-600 text-white',
+    };
+  }
+  if (name.includes('meta') || name.includes('facebook')) {
+    return {
+      chip: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+      avatar: 'bg-indigo-600 text-white',
+    };
+  }
+  if (name.includes('apple')) {
+    return {
+      chip: 'bg-slate-100 text-slate-700 border-slate-200',
+      avatar: 'bg-slate-800 text-white',
+    };
+  }
+  if (name.includes('netflix')) {
+    return {
+      chip: 'bg-rose-50 text-rose-700 border-rose-100',
+      avatar: 'bg-rose-600 text-white',
+    };
+  }
+
+  return {
+    chip: 'bg-slate-100 text-slate-700 border-slate-200',
+    avatar: 'bg-black text-white',
+  };
 };
   // --- YAHAN PASTE KAREIN ---
 const getProfileStatus = () => {
@@ -850,8 +934,10 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {filteredJobs.map(job => (
-              <div key={job.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200/60 hover:border-black transition-all group shadow-sm">
+            {filteredJobs.map(job => {
+              const companyTheme = getCompanyTheme(job.company);
+              return (
+              <div key={job.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200/60 hover:border-black hover:shadow-lg transition-all group shadow-sm">
                 <div className="flex justify-between items-start mb-8">
                   <div className={`w-12 h-12 ${job.color} rounded-2xl flex items-center justify-center text-white text-lg font-black`}>{job.logo}</div>
                   <div className="flex flex-col items-end gap-2">
@@ -864,7 +950,15 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                   </div>
                 </div>
                 <h4 className="text-xl font-black mb-1">{job.role}</h4>
-                <p className="text-slate-400 font-bold text-xs mb-8 uppercase tracking-tighter">{job.company} • {job.pay}</p>
+                <div className="mb-5 mt-3 flex flex-wrap gap-2">
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${companyTheme.chip}`}>
+                    <Briefcase size={11} />
+                    {job.company}
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wide border border-amber-100">
+                    Deadline: {formatJobDate(job.raw?.deadline)}
+                  </span>
+                </div>
                 {job.matchData?.matchedSkills?.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-5">
                     {job.matchData.matchedSkills.slice(0, 4).map((skill, idx) => (
@@ -886,11 +980,11 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                     </div>
                   </div>
                 )}
-                <button onClick={() => handleApply(job)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${myApplications.some(a => a.company === job.company && a.role === job.role) ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 hover:bg-black hover:text-white'}`}>
+                <button onClick={() => handleOpenJobPreview(job)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${myApplications.some(a => a.company === job.company && a.role === job.role) ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 hover:bg-black hover:text-white'}`}>
                   {myApplications.some(a => a.company === job.company && a.role === job.role) ? 'Pending Approval' : 'Quick Apply'}
                 </button>
               </div>
-            ))}
+            );})}
           </div>
         </div>
       )}
@@ -1408,6 +1502,121 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
 
           <button onClick={handleSubmit} className="w-full py-5 bg-black text-white rounded-[1.8rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
             <Send size={16}/> Push Request to Mentor
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {selectedJobPreview && (
+    <div className="fixed inset-0 z-[115] flex items-center justify-center p-6">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={() => !isApplyingFromPreview && setSelectedJobPreview(null)}
+      ></div>
+
+      <div className="relative z-10 w-full max-w-3xl max-h-[90vh] bg-white rounded-[2.2rem] border border-slate-200 shadow-2xl overflow-hidden">
+        <div className="flex items-start justify-between gap-4 p-7 border-b border-slate-100">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recruiter Job Details</p>
+            <h3 className="text-2xl font-black italic tracking-tight mt-1">{selectedJobPreview.role}</h3>
+            <div className={`mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-2xl border ${getCompanyTheme(selectedJobPreview.company).chip}`}>
+              <div className={`w-7 h-7 rounded-xl text-[11px] font-black flex items-center justify-center ${getCompanyTheme(selectedJobPreview.company).avatar}`}>
+                {(selectedJobPreview.company || '?')[0].toUpperCase()}
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-none">Company</p>
+                <p className="text-xs font-black uppercase tracking-wide text-slate-700 mt-1">{selectedJobPreview.company}</p>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedJobPreview(null)}
+            disabled={isApplyingFromPreview}
+            className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition disabled:opacity-60"
+            aria-label="Close job preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-7 overflow-y-auto max-h-[calc(90vh-170px)] space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[9px] font-black uppercase text-slate-400">Job Type</p>
+              <p className="text-sm font-bold mt-1">{getJobFieldText(selectedJobPreview.raw?.type)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[9px] font-black uppercase text-slate-400">Domain</p>
+              <p className="text-sm font-bold mt-1">{getJobFieldText(selectedJobPreview.raw?.domain)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[9px] font-black uppercase text-slate-400">Location</p>
+              <p className="text-sm font-bold mt-1">{getJobFieldText(selectedJobPreview.raw?.location || selectedJobPreview.loc)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[9px] font-black uppercase text-slate-400">Stipend / CTC</p>
+              <p className="text-sm font-bold mt-1">{getJobFieldText(selectedJobPreview.raw?.stipend || selectedJobPreview.pay)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[9px] font-black uppercase text-slate-400">Duration</p>
+              <p className="text-sm font-bold mt-1">{getJobFieldText(selectedJobPreview.raw?.duration)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[9px] font-black uppercase text-slate-400">Apply Deadline</p>
+              <p className="text-sm font-bold mt-1">{formatJobDate(selectedJobPreview.raw?.deadline)}</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Description</p>
+            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-slate-50 border border-slate-100 rounded-2xl p-4">
+              {getJobFieldText(selectedJobPreview.raw?.description)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Eligibility</p>
+            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-slate-50 border border-slate-100 rounded-2xl p-4">
+              {getJobFieldText(selectedJobPreview.raw?.eligibility)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Required Skills</p>
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+              {(selectedJobPreview.raw?.requiredSkills || []).length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedJobPreview.raw.requiredSkills.map((skill, idx) => (
+                    <span key={idx} className="px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-700">Not specified</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 border-t border-slate-100 bg-white flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setSelectedJobPreview(null)}
+            disabled={isApplyingFromPreview}
+            className="px-5 py-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition disabled:opacity-60"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={handleApplyFromPreview}
+            disabled={isApplyingFromPreview}
+            className="px-6 py-3 rounded-xl bg-black text-white text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition disabled:opacity-60"
+          >
+            {isApplyingFromPreview ? 'Applying...' : 'Apply Now'}
           </button>
         </div>
       </div>

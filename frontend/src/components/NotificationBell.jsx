@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from '../api/axios';
 import { Bell, X, CheckCheck, Trash2 } from 'lucide-react';
 
-const NotificationBell = () => {
+const NotificationBell = ({ externalToggleSignal = 0, hideTrigger = false }) => {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -14,12 +14,25 @@ const NotificationBell = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const dropdownRef = useRef(null);
 
+  // Define fetchNotifications before effects that use it
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const params = { limit: 50 };
+      if (viewFilter === 'unread') params.read = false;
+      const res = await axios.get('/api/notifications/mine', { params });
+      setNotifications(res.data.notifications || []);
+      setUnreadCount(res.data.unreadCount || 0);
+    } catch (err) {
+      // Silently fail — notifications are non-critical
+    }
+  }, [viewFilter]);
+
   // Fetch notifications on mount and poll every 30 seconds
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, [viewFilter]);
+  }, [fetchNotifications]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -32,17 +45,14 @@ const NotificationBell = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const params = { limit: 50 };
-      if (viewFilter === 'unread') params.read = false;
-      const res = await axios.get('/api/notifications/mine', { params });
-      setNotifications(res.data.notifications || []);
-      setUnreadCount(res.data.unreadCount || 0);
-    } catch (err) {
-      // Silently fail — notifications are non-critical
+  useEffect(() => {
+    if (externalToggleSignal > 0) {
+      // Ensure the menu-open path always starts from full list and fresh data.
+      setViewFilter('all');
+      setOpen(true);
+      fetchNotifications();
     }
-  }, [viewFilter]);
+  }, [externalToggleSignal, fetchNotifications]);
 
   const markAsRead = async (id) => {
     try {
@@ -154,20 +164,22 @@ const NotificationBell = () => {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="relative p-2.5 rounded-xl hover:bg-slate-100 transition-colors duration-200"
-      >
-        <Bell size={20} className="text-gray-600" />
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
+      {!hideTrigger && (
+        <button
+          onClick={() => setOpen(!open)}
+          className="relative p-2.5 rounded-xl hover:bg-slate-100 transition-colors duration-200"
+        >
+          <Bell size={20} className="text-gray-600" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+      )}
 
       {open && (
-        <div className="absolute right-0 top-12 w-[34rem] max-w-[95vw] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 max-h-[38rem] overflow-hidden flex flex-col">
+        <div className={`${hideTrigger ? 'fixed right-6 top-24' : 'absolute right-0 top-12'} w-[34rem] max-w-[95vw] bg-white rounded-2xl shadow-2xl border border-slate-200 z-[140] max-h-[38rem] overflow-hidden flex flex-col`}>
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b bg-gradient-to-r from-slate-50 to-white">
             <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider">Notifications</h3>
