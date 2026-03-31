@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   GraduationCap,Presentation, 
-  Building2, Briefcase, ArrowLeft, Mail, Lock, User, 
+  Briefcase, ArrowLeft, Mail, Lock, User, 
   Compass, LayoutDashboard, Shield, BookOpen, Award
 } from 'lucide-react';
 
@@ -55,7 +55,6 @@ const AuthPage = () => {
     { id: 'mentor', title: 'Mentor', icon: Presentation, color: 'text-amber-500', bg: 'bg-amber-50' },
     { id: 'recruiter', title: 'Recruiter', icon: Briefcase, color: 'text-emerald-500', bg: 'bg-emerald-50' },
     { id: 'internal_guide', title: 'Internal Guide', icon: BookOpen, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-    { id: 'placement_cell', title: 'Placement Cell', icon: Building2, color: 'text-rose-500', bg: 'bg-rose-50' },
     { id: 'hod', title: 'HOD', icon: Shield, color: 'text-indigo-500', bg: 'bg-indigo-50' },
     { id: 'dean', title: 'Dean', icon: Award, color: 'text-orange-500', bg: 'bg-orange-50' },
   ];

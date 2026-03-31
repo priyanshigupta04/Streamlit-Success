@@ -46,6 +46,15 @@ exports.updateUserRole = async (req, res) => {
     const VALID = ['student', 'recruiter', 'mentor', 'internal_guide', 'placement_cell', 'hod', 'dean'];
     if (!VALID.includes(role)) return res.status(400).json({ message: 'Invalid role' });
 
+    if (role === 'placement_cell') {
+      const existingPlacementCell = await User.findOne({ role: 'placement_cell' }).select('_id');
+      if (existingPlacementCell && existingPlacementCell._id.toString() !== req.params.id) {
+        return res.status(409).json({
+          message: 'Only one Placement Cell user is allowed in the system.'
+        });
+      }
+    }
+
     const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ user });

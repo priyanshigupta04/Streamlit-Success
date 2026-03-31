@@ -5,6 +5,9 @@ const jwt = require("jsonwebtoken");
 
 // Valid roles enum
 const VALID_ROLES = ['student','recruiter','mentor','internal_guide','placement_cell','hod','dean'];
+const REGISTER_ALLOWED_ROLES = ['student', 'recruiter', 'mentor', 'internal_guide', 'hod', 'dean'];
+
+const PLACEMENT_CELL_EMAIL = (process.env.PLACEMENT_CELL_EMAIL || 'placementcell@institution.edu').toLowerCase();
 
 // ================= REGISTER =================
 const register = async (req, res) => {
@@ -16,8 +19,16 @@ const register = async (req, res) => {
       return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}` });
     }
 
+    // placement_cell account is system-managed and cannot be self-registered.
+    if (!REGISTER_ALLOWED_ROLES.includes(role)) {
+      return res.status(403).json({
+        message: 'Registration for Placement Cell is disabled. Use the fixed Placement Cell account credentials.'
+      });
+    }
+
     // 1. Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -28,7 +39,7 @@ const register = async (req, res) => {
     // 3. Save user to MongoDB
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       role
     });
@@ -52,10 +63,19 @@ const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
     // 1. Find user
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Only the configured Placement Cell account is allowed to log in as placement_cell.
+    if (user.role === 'placement_cell' && user.email !== PLACEMENT_CELL_EMAIL) {
+      return res.status(403).json({
+        message: 'Only the configured Placement Cell account is allowed to log in.'
+      });
     }
 
     // 2. Compare password
