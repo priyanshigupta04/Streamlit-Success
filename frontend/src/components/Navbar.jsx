@@ -35,7 +35,7 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
   const tabs = [
     { id: 'dashboard', label: 'Home', icon: <LayoutDashboard size={14}/> },
     { id: 'applications', label: 'Tracking', icon: <CheckCircle2 size={14}/> },
-    { id: 'logs', label: 'Weekly Logs', icon: <FileText size={14}/> },
+    { id: 'logs', label: 'Weekly Form', icon: <FileText size={14}/> },
     { id: 'docs', label: 'Documents', icon: <Send size={14}/> }
   ];
 

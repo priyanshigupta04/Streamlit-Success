@@ -557,7 +557,7 @@ const StudentDashboard = () => {
 
   const handleLogSubmit = async () => {
     if (!hasInternshipFormSubmitted) {
-      alert("Please submit Internship Form first. Then you can add Weekly Logs.");
+      alert("Please submit Internship Form first. Then you can add Weekly Form entries.");
       setActiveTab('internship_form');
       return;
     }
@@ -1140,7 +1140,7 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                 {latestApprovedForm && (
                   <div className="mt-2 bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-200">
-                      <p>Weekly Logs</p>
+                      <p>Weekly Form</p>
                       <p>{loggedWeeks}/{expectedWeeks} weeks logged ({logCompletionPercent}%)</p>
                     </div>
                     <div className="mt-2 w-full h-2 bg-white/10 rounded-full overflow-hidden">
@@ -1243,13 +1243,13 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
           {!hasInternshipFormSubmitted && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
               <p className="text-sm font-bold text-amber-700">
-                Weekly logs can be added only after Internship Form submission.
+                Weekly form can be filled only after Internship Form submission.
               </p>
             </div>
           )}
 
           <div className="bg-black text-white p-12 rounded-[3rem] shadow-2xl relative overflow-hidden">
-            <h3 className="text-3xl font-black italic tracking-tighter uppercase mb-2">Progress Reporting</h3>
+            <h3 className="text-3xl font-black italic tracking-tighter uppercase mb-2">Weekly Form</h3>
             <div className="space-y-6 max-w-2xl mt-10">
               <div className="grid grid-cols-2 gap-4">
                 <input type="number" placeholder="Week" className="w-full p-4 bg-white/10 rounded-2xl outline-none disabled:opacity-50 disabled:cursor-not-allowed" value={logInput.week} onChange={(e) => setLogInput({...logInput, week: e.target.value})} disabled={!hasInternshipFormSubmitted}/>
@@ -1257,7 +1257,7 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
               </div>
               <textarea className="w-full p-4 bg-white/10 rounded-2xl outline-none h-32 disabled:opacity-50 disabled:cursor-not-allowed" placeholder="Tasks achieved..." value={logInput.tasks} onChange={(e) => setLogInput({...logInput, tasks: e.target.value})} disabled={!hasInternshipFormSubmitted}></textarea>
               <button onClick={handleLogSubmit} disabled={!hasInternshipFormSubmitted} className={`px-10 py-5 rounded-2xl font-black uppercase text-[11px] flex items-center gap-3 ${hasInternshipFormSubmitted ? 'bg-white text-black' : 'bg-slate-300 text-slate-600 cursor-not-allowed'}`}>
-                <Send size={16}/> {hasInternshipFormSubmitted ? 'Submit Log' : 'Submit Internship Form First'}
+                <Send size={16}/> {hasInternshipFormSubmitted ? 'Submit Weekly Form' : 'Submit Internship Form First'}
               </button>
             </div>
           </div>
