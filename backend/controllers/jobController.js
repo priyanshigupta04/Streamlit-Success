@@ -421,7 +421,10 @@ exports.getRecommendedJobs = async (req, res) => {
     // 1. Fetch available jobs
     const jobs = await Job.find({
       status: 'open',
-      approvalStatus: 'approved',
+      $or: [
+        { approvalStatus: 'approved' },
+        { approvalStatus: 'pending', status: 'open' },
+      ],
       ...getExpiryVisibilityFilter(new Date()),
     })
       .populate('postedBy', 'name companyName')
