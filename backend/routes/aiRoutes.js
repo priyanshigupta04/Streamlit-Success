@@ -3,7 +3,8 @@ const router = express.Router();
 const axios = require("axios");
 const protect = require("../middleware/authMiddleware");
 
-const AI_BASE = process.env.AI_SERVICE_URL || "http://localhost:8000";
+const DEFAULT_AI_SERVICE_URL = "https://streamlit-success-ai.onrender.com";
+const AI_BASE = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
 
 // POST /api/ai/analyze — proxy resume analysis to Python FastAPI
 router.post("/analyze", protect, async (req, res) => {

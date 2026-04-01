@@ -5,6 +5,7 @@ const User = require("../models/User");
 const { getExpiryVisibilityFilter } = require('../services/jobLifecycleService');
 
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
+const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
 
 const buildSenderMeta = (req) => ({
   sender: {
@@ -455,7 +456,7 @@ exports.getRecommendedJobs = async (req, res) => {
       // Try rebuilding missing resumeText from already uploaded resume URL.
       try {
         const axios = require('axios');
-        const fastApiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+        const fastApiUrl = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
         const parseResponse = await axios.post(
           `${fastApiUrl}/parse-resume-url`,
           { resume_url: user.resumeUrl },
@@ -505,7 +506,7 @@ exports.getRecommendedJobs = async (req, res) => {
     // 3. Call Python AI services (analysis + recommendation)
     const axios = require('axios');
     const flaskUrl = process.env.FLASK_API_URL || 'http://localhost:8001';
-    const fastApiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    const fastApiUrl = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
     let analysis = null;
 
     try {

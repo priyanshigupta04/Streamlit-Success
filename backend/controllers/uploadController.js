@@ -3,7 +3,8 @@ const crypto = require('crypto');
 const path = require('path');
 const User   = require('../models/User');
 const Notification = require('../models/Notification');
-const AI_BASE = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
+const AI_BASE = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
 
 const buildSenderMeta = (req) => ({
   sender: {
