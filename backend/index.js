@@ -3,6 +3,8 @@ const dotenv = require("dotenv");
 dotenv.config();
 const connectDB = require("./config/db");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const User = require("./models/User");
 
 // Route imports
 const authRoutes = require("./routes/authRoutes");
@@ -21,6 +23,53 @@ const reviewScheduleRoutes = require("./routes/reviewScheduleRoutes");
 
 dotenv.config();
 connectDB();
+
+const PLACEMENT_CELL_EMAIL = (process.env.PLACEMENT_CELL_EMAIL || 'placementcell@institution.edu').toLowerCase();
+const PLACEMENT_CELL_PASSWORD = process.env.PLACEMENT_CELL_PASSWORD || 'Placement@123';
+const PLACEMENT_CELL_NAME = process.env.PLACEMENT_CELL_NAME || 'Placement Cell';
+
+const ensurePlacementCellAccount = async () => {
+  try {
+    const placementUsers = await User.find({ role: 'placement_cell' }).sort({ createdAt: 1 });
+    let primaryPlacementUser = await User.findOne({ email: PLACEMENT_CELL_EMAIL });
+
+    if (!primaryPlacementUser && placementUsers.length > 0) {
+      primaryPlacementUser = placementUsers[0];
+    }
+
+    const hashedPassword = await bcrypt.hash(PLACEMENT_CELL_PASSWORD, 10);
+
+    if (!primaryPlacementUser) {
+      await User.create({
+        name: PLACEMENT_CELL_NAME,
+        email: PLACEMENT_CELL_EMAIL,
+        password: hashedPassword,
+        role: 'placement_cell'
+      });
+      console.log(`Created Placement Cell account: ${PLACEMENT_CELL_EMAIL}`);
+      return;
+    }
+
+    primaryPlacementUser.name = PLACEMENT_CELL_NAME;
+    primaryPlacementUser.email = PLACEMENT_CELL_EMAIL;
+    primaryPlacementUser.password = hashedPassword;
+    primaryPlacementUser.role = 'placement_cell';
+    await primaryPlacementUser.save();
+
+    const extraPlacementUsers = placementUsers.filter(
+      (u) => u._id.toString() !== primaryPlacementUser._id.toString()
+    );
+    if (extraPlacementUsers.length > 0) {
+      console.warn(
+        `Found ${extraPlacementUsers.length} additional placement_cell users. Their login is blocked by fixed Placement Cell email policy.`
+      );
+    }
+  } catch (error) {
+    console.error('Failed to ensure Placement Cell account:', error.message);
+  }
+};
+
+ensurePlacementCellAccount();
 
 const app = express();
 app.use(cors());

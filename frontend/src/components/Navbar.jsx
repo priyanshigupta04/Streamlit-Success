@@ -1,13 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, LogOut, LayoutDashboard, CheckCircle2, FileText, Send, ShieldCheck } from 'lucide-react';
+import { Search, LogOut, LayoutDashboard, CheckCircle2, FileText, Send, ShieldCheck, UserCircle2, ChevronDown, Bell } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import { useAuth } from '../context/AuthContext';
 
-const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: logoutProp, onLogoutClick, profile }) => {
+const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: logoutProp, onLogoutClick, profile, onProfileClick, showProfileButton = false, showProfileDropdown = false, profileName = '' }) => {
   const { logout: authLogout } = useAuth();
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [openProfileMenu, setOpenProfileMenu] = useState(false);
+  const [notificationSignal, setNotificationSignal] = useState(0);
+  const profileMenuRef = useRef(null);
+
+  useEffect(() => {
+    const closeOnOutside = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setOpenProfileMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', closeOnOutside);
+    return () => document.removeEventListener('mousedown', closeOnOutside);
+  }, []);
 
   const handleLogoutClick = () => {
     if (onLogoutClick) { onLogoutClick(); return; }
@@ -52,7 +65,7 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
         </div>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4" ref={profileMenuRef}>
         {setSearchTerm && (
           <div className="relative group hidden md:block">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -63,14 +76,76 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
             />
           </div>
         )}
-        <NotificationBell />
-        <button 
-          onClick={handleLogoutClick}
-          className="p-3 bg-rose-50 text-rose-600 rounded-2xl hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center shadow-sm"
-          title="Sign Out"
-        >
-          <LogOut size={20}/>
-        </button>
+
+        {showProfileDropdown ? (
+          <>
+            <button
+              onClick={() => setOpenProfileMenu((prev) => !prev)}
+              className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-all"
+            >
+              <UserCircle2 size={30} className="text-slate-400" />
+              <span className="text-sm font-semibold text-slate-700">{profileName || profile?.fullName || 'Profile'}</span>
+              <ChevronDown size={16} className="text-slate-500" />
+            </button>
+
+            {openProfileMenu && (
+              <div className="absolute right-0 top-14 w-56 bg-white rounded-xl border border-slate-200 shadow-xl py-2 z-[120]">
+                <button
+                  onClick={() => {
+                    if (onProfileClick) onProfileClick();
+                    setOpenProfileMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <UserCircle2 size={16} />
+                  My Profile
+                </button>
+                <button
+                  onClick={() => {
+                    setNotificationSignal((prev) => prev + 1);
+                    setOpenProfileMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <Bell size={16} />
+                  Notification
+                </button>
+                <button
+                  onClick={() => {
+                    handleLogoutClick();
+                    setOpenProfileMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {showProfileButton && (
+          <button
+            onClick={onProfileClick}
+            className="px-3 py-2.5 bg-indigo-50 text-indigo-700 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 shadow-sm text-sm font-semibold"
+            title="My Profile"
+          >
+            <UserCircle2 size={18} />
+            My Profile
+          </button>
+            )}
+            <NotificationBell />
+            <button 
+              onClick={handleLogoutClick}
+              className="p-3 bg-rose-50 text-rose-600 rounded-2xl hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center shadow-sm"
+              title="Sign Out"
+            >
+              <LogOut size={20}/>
+            </button>
+          </>
+        )}
+        {showProfileDropdown && <NotificationBell externalToggleSignal={notificationSignal} hideTrigger />}
       </div>
     </nav>
 

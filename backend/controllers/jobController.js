@@ -3,6 +3,16 @@ const Notification = require("../models/Notification");
 const Application = require("../models/Application");
 const User = require("../models/User");
 
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
+
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 const normalizeSkillList = (skills) => {
   if (Array.isArray(skills)) return skills.map((s) => String(s).trim()).filter(Boolean);
   if (typeof skills === 'string') {
@@ -177,17 +187,40 @@ exports.createJob = async (req, res) => {
   try {
     const { title, company, type, domain, description,
             requiredSkills, stipend, location, duration,
-            deadline, eligibility } = req.body;
+            deadline, eligibility,
+            companyAddress, companyCity, companyState, companyWebsite, companyTechDomain } = req.body;
 
     const job = await Job.create({
       title, company, type, domain, description,
       requiredSkills: requiredSkills || [],
       stipend, location, duration, deadline, eligibility,
+      companyAddress, companyCity, companyState, companyWebsite, companyTechDomain,
       postedBy: req.user._id,
       jdText: description,
       status: 'open',
       approvalStatus: 'pending',
     });
+
+    try {
+      const placementUsers = await User.find({ role: 'placement_cell' }).select('_id').lean();
+      if (placementUsers.length) {
+        const recruiterName = req.user?.name || 'Recruiter';
+        const placementNotifications = placementUsers.map((u) => ({
+          userId: u._id,
+          type: 'announcement',
+          title: 'New Job Posted',
+          message: `${recruiterName} posted a new job: ${title} at ${company}. Please review for approval.`,
+          link: '/placement-cell-dashboard',
+          senderId: req.user?._id || null,
+          senderName: recruiterName,
+          senderRole: req.user?.role || 'recruiter',
+        }));
+        await Notification.insertMany(placementNotifications);
+        console.log(`✅ Sent job posting notification to ${placementUsers.length} placement_cell users`);
+      }
+    } catch (notifyErr) {
+      console.error('Failed to notify placement cell for new job:', notifyErr.message);
+    }
 
     res.status(201).json({ job });
   } catch (err) {
@@ -266,7 +299,8 @@ exports.updateJob = async (req, res) => {
     }
 
     const allowed = ['title','company','type','domain','description','requiredSkills',
-      'stipend','location','duration','deadline','eligibility','status'];
+      'stipend','location','duration','deadline','eligibility','status',
+      'companyAddress','companyCity','companyState','companyWebsite','companyTechDomain'];
     allowed.forEach(f => { if (req.body[f] !== undefined) job[f] = req.body[f]; });
     if (req.body.description) job.jdText = req.body.description;
 
@@ -314,7 +348,29 @@ exports.approveJob = async (req, res) => {
     await job.save();
 
     // notify recruiter
-    await Notification.send(job.postedBy, 'announcement', 'Job Approved', `Your job "${job.title}" was approved and is now visible to students.`, `/jobs/${job._id}`);
+    await Notification.send(job.postedBy, 'announcement', 'Job Approved', `Your job "${job.title}" was approved and is now visible to students.`, `/jobs/${job._id}`, buildSenderMeta(req));
+
+    // notify all students about the approved job
+    try {
+      const studentUsers = await User.find({ role: 'student' }).select('_id').lean();
+      if (studentUsers.length) {
+        const recruiterName = job.postedBy?.name || 'Recruiter';
+        const studentNotifications = studentUsers.map((u) => ({
+          userId: u._id,
+          type: 'announcement',
+          title: 'New Job Opportunity',
+          message: `New job posted at ${job.company}: ${job.title} - ${job.location}. Check out the details and apply now!`,
+          link: `/jobs/${job._id}`,
+          senderId: job.postedBy || null,
+          senderName: recruiterName,
+          senderRole: 'recruiter',
+        }));
+        await Notification.insertMany(studentNotifications);
+        console.log(`✅ Sent job approval notification to ${studentUsers.length} students`);
+      }
+    } catch (studentNotifyErr) {
+      console.error('Failed to notify students for approved job:', studentNotifyErr.message);
+    }
 
     res.json({ job });
   } catch (err) {
@@ -333,7 +389,7 @@ exports.rejectJob = async (req, res) => {
     await job.save();
 
     // notify recruiter with reason
-    await Notification.send(job.postedBy, 'announcement', 'Job Rejected', `Your job "${job.title}" was rejected. Reason: ${job.rejectionReason || 'No reason provided'}.`, `/jobs/${job._id}`);
+    await Notification.send(job.postedBy, 'announcement', 'Job Rejected', `Your job "${job.title}" was rejected. Reason: ${job.rejectionReason || 'No reason provided'}.`, `/jobs/${job._id}`, buildSenderMeta(req));
 
     res.json({ job });
   } catch (err) {
@@ -392,7 +448,7 @@ exports.getRecommendedJobs = async (req, res) => {
         const parseResponse = await axios.post(
           `${fastApiUrl}/parse-resume-url`,
           { resume_url: user.resumeUrl },
-          { timeout: 30000 }
+          { timeout: AI_TIMEOUT_MS }
         );
 
         const parsedFields = parseResponse.data?.fields || {};
@@ -445,7 +501,7 @@ exports.getRecommendedJobs = async (req, res) => {
       const analysisResponse = await axios.post(
         `${fastApiUrl}/analyze`,
         { resume_text: resumeText },
-        { timeout: 30000 }
+        { timeout: AI_TIMEOUT_MS }
       );
       analysis = analysisResponse.data || null;
       aiMeta.serviceStatus.analysis = 'ok';
@@ -463,7 +519,7 @@ exports.getRecommendedJobs = async (req, res) => {
         resume_text: resumeText,
         jobs: jobsPayload,
         profile_completeness: aiMeta.profileCompleteness,
-      }, { timeout: 30000 });
+      }, { timeout: AI_TIMEOUT_MS });
 
       rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
       if (rankedJobs.length > 0) {
@@ -480,7 +536,7 @@ exports.getRecommendedJobs = async (req, res) => {
         resume_text: resumeText,
         jobs: jobsPayload,
         profile_completeness: aiMeta.profileCompleteness,
-      }, { timeout: 30000 });
+      }, { timeout: AI_TIMEOUT_MS });
 
       rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
       if (rankedJobs.length > 0) {

@@ -54,6 +54,15 @@ const userSchema = new mongoose.Schema({
   // Company (recruiter-specific)
   companyName:     String,
   companyIndustry: String,
+  companyTechDomain: String,
+  companyEstablished: String,
+  companySize: String,
+  companyWebsite: String,
+  companyState: String,
+  companyCity: String,
+  companyLocation: String,
+  companyAddress: String,
+  companyDescription: String,
 
 }, { timestamps: true });
 

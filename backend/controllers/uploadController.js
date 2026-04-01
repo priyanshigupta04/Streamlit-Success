@@ -3,6 +3,14 @@ const crypto = require('crypto');
 const User   = require('../models/User');
 const Notification = require('../models/Notification');
 
+const buildSenderMeta = (req) => ({
+  sender: {
+    id: req?.user?._id || null,
+    name: req?.user?.name || '',
+    role: req?.user?.role || '',
+  },
+});
+
 // ─────────────────────────────────────────────
 //  POST /api/upload/image
 //  Uploads profile picture to Cloudinary and
@@ -165,7 +173,8 @@ const uploadOfferLetter = async (req, res) => {
           'offer_received',
           'Offer Letter Uploaded',
           `${studentName} uploaded an offer letter (Hash: ${offerLetterHash.substring(0, 8).toUpperCase()}).`,
-          '/mentor-dashboard'
+          '/mentor-dashboard',
+          buildSenderMeta(req)
         );
         console.log('✅ Mentor notification sent. ID:', mentorNotif._id);
       } catch (e) {
@@ -186,7 +195,10 @@ const uploadOfferLetter = async (req, res) => {
           type: 'offer_received',
           title: 'Offer Letter Uploaded',
           message: `${studentName} (${dept}) uploaded an offer letter.`,
-          link: '/placement-cell-dashboard'
+          link: '/placement-cell-dashboard',
+          senderId: req.user?._id || null,
+          senderName: req.user?.name || studentName,
+          senderRole: req.user?.role || 'student',
         }));
         
         const result = await Notification.insertMany(notifs);

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   Briefcase, Users, Plus, X, Search, Filter, Eye, ChevronDown,
   MapPin, Clock, DollarSign, CheckCircle2, XCircle, Mail, FileText,
-  Star, Building2, ArrowRight, LayoutDashboard, Send, Edit, Trash2, CalendarDays,
+  Star, Building2, ArrowRight, LayoutDashboard, Send, Edit, Trash2, CalendarDays, Save, Globe,
 } from 'lucide-react';
 
 const STATUS_COLORS = {
@@ -47,7 +47,23 @@ const [interviewForm, setInterviewForm] = useState({
     title: '', company: user?.companyName || '', type: 'internship',
     domain: '', description: '', requiredSkills: '',
     eligibility: '', stipend: '', location: '', duration: '', deadline: '',
+    companyAddress: '', companyCity: '', companyState: '', companyWebsite: '', companyTechDomain: '',
   });
+  const [recruiterProfile, setRecruiterProfile] = useState({
+    companyName: user?.companyName || '',
+    companyIndustry: '',
+    companyTechDomain: '',
+    companyEstablished: '',
+    companySize: '',
+    companyWebsite: '',
+    companyState: '',
+    companyCity: '',
+    companyLocation: '',
+    companyAddress: '',
+    companyDescription: '',
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const StatCard = ({ icon: Icon, label, value, color }) => (
   <div className="bg-white rounded-2xl shadow-md hover:shadow-xl transition p-6 flex items-center gap-5">
     <div className={`${color} p-4 rounded-xl text-white shadow`}>
@@ -66,7 +82,90 @@ const [interviewForm, setInterviewForm] = useState({
   useEffect(() => {
     fetchMyJobs();
     fetchScheduledInterviews();
+    fetchRecruiterProfile();
   }, []);
+
+  const fetchRecruiterProfile = async () => {
+    try {
+      setProfileLoading(true);
+      const res = await axios.get('/api/profile');
+      const data = res.data || {};
+
+      const nextProfile = {
+        companyName: data.companyName || '',
+        companyIndustry: data.companyIndustry || '',
+        companyTechDomain: data.companyTechDomain || '',
+        companyEstablished: data.companyEstablished || '',
+        companySize: data.companySize || '',
+        companyWebsite: data.companyWebsite || '',
+        companyState: data.companyState || '',
+        companyCity: data.companyCity || '',
+        companyLocation: data.companyLocation || '',
+        companyAddress: data.companyAddress || '',
+        companyDescription: data.companyDescription || '',
+      };
+
+      setRecruiterProfile(nextProfile);
+      setJobForm((prev) => ({
+        ...prev,
+        company: nextProfile.companyName || prev.company || user?.companyName || '',
+        companyAddress: nextProfile.companyAddress || prev.companyAddress || '',
+        companyCity: nextProfile.companyCity || prev.companyCity || '',
+        companyState: nextProfile.companyState || prev.companyState || '',
+        companyWebsite: nextProfile.companyWebsite || prev.companyWebsite || '',
+        companyTechDomain: nextProfile.companyTechDomain || prev.companyTechDomain || '',
+      }));
+    } catch (err) {
+      console.error('Failed to fetch recruiter profile', err);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleRecruiterProfileChange = (field, value) => {
+    setRecruiterProfile((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveRecruiterProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingProfile(true);
+      const payload = { ...recruiterProfile };
+      const res = await axios.put('/api/profile', payload);
+      const updated = res.data || {};
+
+      setRecruiterProfile((prev) => ({
+        ...prev,
+        companyName: updated.companyName || prev.companyName,
+        companyIndustry: updated.companyIndustry || '',
+        companyTechDomain: updated.companyTechDomain || '',
+        companyEstablished: updated.companyEstablished || '',
+        companySize: updated.companySize || '',
+        companyWebsite: updated.companyWebsite || '',
+        companyState: updated.companyState || '',
+        companyCity: updated.companyCity || '',
+        companyLocation: updated.companyLocation || '',
+        companyAddress: updated.companyAddress || '',
+        companyDescription: updated.companyDescription || '',
+      }));
+
+      setJobForm((prev) => ({
+        ...prev,
+        company: updated.companyName || recruiterProfile.companyName || prev.company,
+        companyAddress: updated.companyAddress || recruiterProfile.companyAddress || prev.companyAddress,
+        companyCity: updated.companyCity || recruiterProfile.companyCity || prev.companyCity,
+        companyState: updated.companyState || recruiterProfile.companyState || prev.companyState,
+        companyWebsite: updated.companyWebsite || recruiterProfile.companyWebsite || prev.companyWebsite,
+        companyTechDomain: updated.companyTechDomain || recruiterProfile.companyTechDomain || prev.companyTechDomain,
+      }));
+
+      alert('Company profile saved successfully');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to save company profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const fetchMyJobs = async () => {
     try {
@@ -89,7 +188,24 @@ const [interviewForm, setInterviewForm] = useState({
       };
       await axios.post('/api/jobs', payload);
       setShowPostForm(false);
-      setJobForm({ title: '', company: user?.companyName || '', type: 'internship', domain: '', description: '', requiredSkills: '', eligibility: '', stipend: '', location: '', duration: '', deadline: '' });
+      setJobForm({
+        title: '',
+        company: recruiterProfile.companyName || user?.companyName || '',
+        type: 'internship',
+        domain: '',
+        description: '',
+        requiredSkills: '',
+        eligibility: '',
+        stipend: '',
+        location: recruiterProfile.companyLocation || '',
+        duration: '',
+        deadline: '',
+        companyAddress: recruiterProfile.companyAddress || '',
+        companyCity: recruiterProfile.companyCity || '',
+        companyState: recruiterProfile.companyState || '',
+        companyWebsite: recruiterProfile.companyWebsite || '',
+        companyTechDomain: recruiterProfile.companyTechDomain || '',
+      });
       fetchMyJobs();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to post job');
@@ -231,15 +347,30 @@ const handleCancelInterview = async (applicationId) => {
     return new Date(dateValue).toLocaleDateString();
   };
 
+  const companyProfileCompletion = (() => {
+    const required = [
+      recruiterProfile.companyName,
+      recruiterProfile.companyTechDomain,
+      recruiterProfile.companyCity,
+      recruiterProfile.companyState,
+      recruiterProfile.companyAddress,
+      recruiterProfile.companyDescription,
+    ];
+    const filled = required.filter((v) => String(v || '').trim()).length;
+    return Math.round((filled / required.length) * 100);
+  })();
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
-      <Navbar />
+      <Navbar
+        showProfileDropdown
+        profileName={user?.name}
+        onProfileClick={() => setActiveTab('company_profile')}
+      />
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 bg-white/80 backdrop-blur border-r shadow-sm min-h-[calc(100vh-64px)] p-5">
           <div className="mb-6">
-            <h3 className="font-semibold text-gray-800 text-lg">{user?.name}</h3>
-            <p className="text-sm text-gray-500">{user?.companyName || 'Recruiter'}</p>
+            <h3 className="font-semibold text-gray-800 text-lg">Recruiter</h3>
           </div>
           <nav className="space-y-1">
             {tabs.map(t => (
@@ -350,20 +481,206 @@ const handleCancelInterview = async (applicationId) => {
             </div>
           )}
 
+          {/* COMPANY PROFILE TAB */}
+          {activeTab === 'company_profile' && (
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">Company Profile</h2>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                <form onSubmit={handleSaveRecruiterProfile} className="xl:col-span-2 bg-white rounded-2xl shadow-md p-6 space-y-6">
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-4">Core Company Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="Company Name *"
+                        value={recruiterProfile.companyName}
+                        onChange={(v) => handleRecruiterProfileChange('companyName', v)}
+                        required
+                      />
+                      <Input
+                        label="Main Industry"
+                        value={recruiterProfile.companyIndustry}
+                        onChange={(v) => handleRecruiterProfileChange('companyIndustry', v)}
+                        placeholder="e.g. Software Services"
+                      />
+                      <Input
+                        label="Main Tech Domain"
+                        value={recruiterProfile.companyTechDomain}
+                        onChange={(v) => handleRecruiterProfileChange('companyTechDomain', v)}
+                        placeholder="e.g. AI, Cloud, Web Development"
+                      />
+                      <Input
+                        label="Established Year"
+                        value={recruiterProfile.companyEstablished}
+                        onChange={(v) => handleRecruiterProfileChange('companyEstablished', v)}
+                        placeholder="e.g. 2012"
+                      />
+                      <Input
+                        label="Company Size"
+                        value={recruiterProfile.companySize}
+                        onChange={(v) => handleRecruiterProfileChange('companySize', v)}
+                        placeholder="e.g. 200-500 employees"
+                      />
+                      <Input
+                        label="Website"
+                        value={recruiterProfile.companyWebsite}
+                        onChange={(v) => handleRecruiterProfileChange('companyWebsite', v)}
+                        placeholder="https://yourcompany.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-4">Location Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="State"
+                        value={recruiterProfile.companyState}
+                        onChange={(v) => handleRecruiterProfileChange('companyState', v)}
+                      />
+                      <Input
+                        label="City"
+                        value={recruiterProfile.companyCity}
+                        onChange={(v) => handleRecruiterProfileChange('companyCity', v)}
+                      />
+                      <Input
+                        label="Primary Work Location"
+                        value={recruiterProfile.companyLocation}
+                        onChange={(v) => handleRecruiterProfileChange('companyLocation', v)}
+                        placeholder="e.g. Bangalore / Remote"
+                      />
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Company Address</label>
+                        <textarea
+                          className="w-full border rounded-lg p-2 text-sm"
+                          rows={2}
+                          value={recruiterProfile.companyAddress}
+                          onChange={(e) => handleRecruiterProfileChange('companyAddress', e.target.value)}
+                          placeholder="Full office address"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-2">About Company</h3>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company Overview</label>
+                    <textarea
+                      className="w-full border rounded-lg p-2 text-sm"
+                      rows={4}
+                      value={recruiterProfile.companyDescription}
+                      onChange={(e) => handleRecruiterProfileChange('companyDescription', e.target.value)}
+                      placeholder="Write about your company, culture, products, and hiring focus..."
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="text-xs text-gray-500 flex items-center gap-2">
+                      <Globe size={14} />
+                      This information can be used in recruiter branding and job visibility.
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={savingProfile || profileLoading}
+                      className="bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 font-medium flex items-center gap-2 disabled:opacity-60"
+                    >
+                      <Save size={15} /> {savingProfile ? 'Saving...' : 'Save Profile'}
+                    </button>
+                  </div>
+                </form>
+
+                <aside className="xl:col-span-1 xl:sticky xl:top-6">
+                  <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-5 text-white">
+                      <p className="text-xs uppercase tracking-wider opacity-90">Live Company Preview</p>
+                      <h3 className="text-xl font-semibold mt-1">{recruiterProfile.companyName || 'Your Company Name'}</h3>
+                      <p className="text-sm opacity-90 mt-1">{recruiterProfile.companyIndustry || 'Industry not added'}</p>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                          <span>Profile Completion</span>
+                          <span>{companyProfileCompletion}%</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-600 rounded-full transition-all"
+                            style={{ width: `${companyProfileCompletion}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        <p className="flex items-start gap-2 text-gray-700">
+                          <Building2 size={16} className="mt-0.5 text-indigo-600" />
+                          <span>{recruiterProfile.companyTechDomain || 'Main tech domain not added'}</span>
+                        </p>
+                        <p className="flex items-start gap-2 text-gray-700">
+                          <MapPin size={16} className="mt-0.5 text-indigo-600" />
+                          <span>
+                            {recruiterProfile.companyCity || 'City'}, {recruiterProfile.companyState || 'State'}
+                            {recruiterProfile.companyAddress ? ` - ${recruiterProfile.companyAddress}` : ''}
+                          </span>
+                        </p>
+                        <p className="flex items-start gap-2 text-gray-700">
+                          <CalendarDays size={16} className="mt-0.5 text-indigo-600" />
+                          <span>Established: {recruiterProfile.companyEstablished || 'Not added'}</span>
+                        </p>
+                        <p className="flex items-start gap-2 text-gray-700">
+                          <Users size={16} className="mt-0.5 text-indigo-600" />
+                          <span>Team size: {recruiterProfile.companySize || 'Not added'}</span>
+                        </p>
+                        <p className="flex items-start gap-2 text-gray-700 break-all">
+                          <Globe size={16} className="mt-0.5 text-indigo-600" />
+                          <span>{recruiterProfile.companyWebsite || 'Website not added'}</span>
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t">
+                        <p className="text-xs font-medium text-gray-500 mb-2">About</p>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          {recruiterProfile.companyDescription || 'Add a short company overview so students get a realistic view of your company.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          )}
+
           {/* POST JOB TAB */}
           {activeTab === 'postjob' && (
             <div>
               <h2 className="text-2xl font-bold text-gray-800 mb-6">Post New Job</h2>
               <form onSubmit={handlePostJob} className="bg-white rounded-xl shadow-sm p-6 max-w-3xl">
+                <div className="mb-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/60">
+                  <p className="text-xs font-semibold text-indigo-700">Auto-filled from Company Profile</p>
+                  <p className="text-xs text-indigo-600 mt-1">Company details are prefilled from your profile. You can edit before posting this job.</p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input label="Job Title *" value={jobForm.title} onChange={v => setJobForm({...jobForm, title: v})} required />
                   <Input label="Company *" value={jobForm.company} onChange={v => setJobForm({...jobForm, company: v})} required />
                   <Select label="Type *" value={jobForm.type} onChange={v => setJobForm({...jobForm, type: v})} options={[{v:'internship',l:'Internship'},{v:'fulltime',l:'Full-Time'},{v:'parttime',l:'Part-Time'}]} />
                   <Input label="Domain" value={jobForm.domain} onChange={v => setJobForm({...jobForm, domain: v})} placeholder="e.g. Web Development" />
+                  <Input label="Company Tech Domain" value={jobForm.companyTechDomain} onChange={v => setJobForm({...jobForm, companyTechDomain: v})} placeholder="e.g. AI/ML, Cloud" />
+                  <Input label="Company Website" value={jobForm.companyWebsite} onChange={v => setJobForm({...jobForm, companyWebsite: v})} placeholder="https://company.com" />
                   <Input label="Location" value={jobForm.location} onChange={v => setJobForm({...jobForm, location: v})} placeholder="e.g. Mumbai / Remote" />
+                  <Input label="Company City" value={jobForm.companyCity} onChange={v => setJobForm({...jobForm, companyCity: v})} placeholder="e.g. Ahmedabad" />
+                  <Input label="Company State" value={jobForm.companyState} onChange={v => setJobForm({...jobForm, companyState: v})} placeholder="e.g. Gujarat" />
                   <Input label="Duration" value={jobForm.duration} onChange={v => setJobForm({...jobForm, duration: v})} placeholder="e.g. 6 months" />
                   <Input label="Stipend / Salary" value={jobForm.stipend} onChange={v => setJobForm({...jobForm, stipend: v})} placeholder="e.g. ₹15,000/month" />
                   <Input label="Deadline" type="date" value={jobForm.deadline} onChange={v => setJobForm({...jobForm, deadline: v})} />
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Address</label>
+                  <textarea
+                    className="w-full border rounded-lg p-2 text-sm"
+                    rows={2}
+                    value={jobForm.companyAddress}
+                    onChange={e => setJobForm({...jobForm, companyAddress: e.target.value})}
+                    placeholder="Full company address"
+                  />
                 </div>
                 <div className="mt-4">
                   <Input label="Required Skills (comma-separated)" value={jobForm.requiredSkills} onChange={v => setJobForm({...jobForm, requiredSkills: v})} placeholder="react, node.js, mongodb" />

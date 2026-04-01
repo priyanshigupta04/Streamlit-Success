@@ -8,6 +8,8 @@ const ALLOWED_PROFILE_FIELDS = [
   'resumeName', 'image', 'certificates', 'phone', 'bio',
   'education', 'projects', 'certifications', 'linkedinUrl',
   'githubUrl', 'portfolioUrl', 'year', 'semester', 'companyName', 'companyIndustry',
+  'companyTechDomain', 'companyEstablished', 'companySize', 'companyWebsite',
+  'companyState', 'companyCity', 'companyLocation', 'companyAddress', 'companyDescription',
   'resumeUrl', 'resumeText', 'offerLetterUrl', 'offerLetterName', 'offerLetterHash', 'internshipReason'
 ];
 
