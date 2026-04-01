@@ -131,6 +131,7 @@ const StudentDashboard = () => {
     enrollmentNo: '',
     department: '',
     semester: '',
+    semesterStartDate: '',
     branch: '',
     specialization: '', 
     skills: '',
@@ -144,19 +145,89 @@ const StudentDashboard = () => {
   });
 
    const [selectedFile, setSelectedFile] = useState(null);
+  const getMaxSemestersByBranch = (branch = '') => {
+    const normalized = String(branch || '').trim().toLowerCase();
+    if (!normalized) return 8;
+
+    if (normalized.includes('b.tech') || normalized.includes('btech') || normalized.includes('be')) return 8;
+    if (normalized.includes('bca')) return 6;
+    if (normalized.includes('b.sc') || normalized.includes('bsc')) return 6;
+    if (normalized.includes('b.com') || normalized.includes('bcom')) return 6;
+    if (normalized.includes('bba')) return 6;
+    if (normalized.includes('mca')) return 4;
+    if (normalized.includes('m.tech') || normalized.includes('mtech')) return 4;
+    if (normalized.includes('mba')) return 4;
+
+    return 8;
+  };
+
+  const calculateSemesterFromStartDate = (semesterStartDate, branch, now = new Date()) => {
+    if (!semesterStartDate) return '';
+
+    const start = new Date(semesterStartDate);
+    if (Number.isNaN(start.getTime())) return '';
+
+    const termIndex = (date) => (date.getFullYear() * 2) + (date.getMonth() >= 6 ? 1 : 0);
+    const semester = Math.max(1, (termIndex(now) - termIndex(start)) + 1);
+    const maxSemester = getMaxSemestersByBranch(branch);
+    return Math.min(Math.max(1, semester), maxSemester);
+  };
+
+  const isValidHttpUrl = (value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(String(value));
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const isValidPhoneLike = (value) => {
+    if (!value) return true;
+    return /^[+]?[0-9\s()-]{7,20}$/.test(String(value));
+  };
+
+  const validateProfileBeforeSave = (nextProfile) => {
+    if (!isValidPhoneLike(nextProfile.contact)) return 'Contact number format is invalid';
+    if (nextProfile.altEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextProfile.altEmail)) {
+      return 'Alternative email is invalid';
+    }
+    if (!isValidHttpUrl(nextProfile.github)) return 'GitHub URL must start with http/https';
+    if (!isValidHttpUrl(nextProfile.linkedin)) return 'LinkedIn URL must start with http/https';
+    if (nextProfile.cgpa) {
+      const cgpa = Number(nextProfile.cgpa);
+      if (Number.isNaN(cgpa) || cgpa < 0 || cgpa > 10) return 'CGPA must be between 0 and 10';
+    }
+    if (nextProfile.semesterStartDate) {
+      const start = new Date(nextProfile.semesterStartDate);
+      if (Number.isNaN(start.getTime())) return 'Semester start date is invalid';
+      if (start > new Date()) return 'Semester start date cannot be in the future';
+    }
+    return '';
+  };
+
+  const toDateInputValue = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+  };
+
   const normalizeUser = (data) => ({
     fullName: data.name || data.fullName || 'New Student',
     contact: data.contact || '',
     email: data.email || user?.email || '',
     altEmail: data.altEmail || '',
-    github: data.github || '',
-    linkedin: data.linkedin || '',
+    github: data.github || data.githubUrl || '',
+    linkedin: data.linkedin || data.linkedinUrl || '',
     cgpa: data.cgpa || '',
     admissionYear: data.admissionYear || '',
     graduationYear: data.graduationYear || '',
     enrollmentNo: data.enrollmentNo || '',
     department: data.department || '',
-    semester: data.semester || '',
+    semester: data.semester || calculateSemesterFromStartDate(data.semesterStartDate, data.branch) || '',
+    semesterStartDate: toDateInputValue(data.semesterStartDate),
     branch: data.branch || '',
     specialization: data.specialization || '',
     skills: Array.isArray(data.skills) ? data.skills.join(', ') : (data.skills || ''),
@@ -171,6 +242,8 @@ const StudentDashboard = () => {
 
   const denormalizeUser = (profile) => {
     const payload = { ...profile, name: profile.fullName };
+    payload.githubUrl = profile.github;
+    payload.linkedinUrl = profile.linkedin;
     delete payload.fullName;
     return payload;
   };
@@ -284,7 +357,19 @@ const StudentDashboard = () => {
 
   const syncProfile = async () => {
     try {
-      const payload = denormalizeUser(profile);
+      const computedSemester = calculateSemesterFromStartDate(profile.semesterStartDate, profile.branch);
+      const profileToSave = {
+        ...profile,
+        semester: computedSemester || profile.semester,
+      };
+
+      const validationError = validateProfileBeforeSave(profileToSave);
+      if (validationError) {
+        alert(validationError);
+        return;
+      }
+
+      const payload = denormalizeUser(profileToSave);
       const res = await axios.put('/api/profile', payload);
       // server returns updated user object
       setProfile(normalizeUser(res.data));
@@ -318,7 +403,11 @@ const StudentDashboard = () => {
           setUploadProgress(prev => ({ ...prev, image: pct }));
         },
       });
-      setProfile(prev => ({ ...prev, image: res.data.imageUrl }));
+      const persistedImageUrl = res.data?.imageUrl || res.data?.user?.image || '';
+      if (!persistedImageUrl) {
+        throw new Error('Image URL missing in upload response');
+      }
+      setProfile(prev => ({ ...prev, image: persistedImageUrl }));
     } catch (err) {
       console.error('Image upload failed', err);
       alert('Image upload failed: ' + (err.response?.data?.message || err.message));
@@ -705,6 +794,17 @@ const handleApplyFromPreview = async () => {
   }
 };
 
+const hasAlreadyAppliedForJob = (job) => {
+  if (!job) return false;
+  return myApplications.some(
+    (a) =>
+      a.jobId?._id === job.id ||
+      a.jobId === job.id ||
+      a.id === job.id ||
+      (a.company === job.company && a.role === job.role)
+  );
+};
+
 const getJobFieldText = (value) => {
   if (Array.isArray(value)) {
     const list = value.map((item) => String(item || '').trim()).filter(Boolean);
@@ -805,6 +905,7 @@ const getProfileStatus = () => {
 };
 
 const status = getProfileStatus();
+const previewAlreadyApplied = hasAlreadyAppliedForJob(selectedJobPreview);
 const latestGuideAssignedForm = submittedForms
   .filter((form) => form.status === 'approved' && form.internalGuide)
   .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0];
@@ -981,7 +1082,7 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                   </div>
                 )}
                 <button onClick={() => handleOpenJobPreview(job)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${myApplications.some(a => a.company === job.company && a.role === job.role) ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 hover:bg-black hover:text-white'}`}>
-                  {myApplications.some(a => a.company === job.company && a.role === job.role) ? 'Pending Approval' : 'Quick Apply'}
+                  {myApplications.some(a => a.company === job.company && a.role === job.role) ? 'Pending Approval' : 'View Details'}
                 </button>
               </div>
             );})}
@@ -1515,7 +1616,7 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
         onClick={() => !isApplyingFromPreview && setSelectedJobPreview(null)}
       ></div>
 
-      <div className="relative z-10 w-full max-w-3xl max-h-[90vh] bg-white rounded-[2.2rem] border border-slate-200 shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-3xl max-h-[90vh] bg-white rounded-[2.2rem] border border-slate-200 shadow-2xl overflow-hidden flex flex-col">
         <div className="flex items-start justify-between gap-4 p-7 border-b border-slate-100">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recruiter Job Details</p>
@@ -1541,7 +1642,7 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
           </button>
         </div>
 
-        <div className="p-7 overflow-y-auto max-h-[calc(90vh-170px)] space-y-6">
+        <div className="p-7 overflow-y-auto flex-1 min-h-0 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
               <p className="text-[9px] font-black uppercase text-slate-400">Job Type</p>
@@ -1613,10 +1714,10 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
           <button
             type="button"
             onClick={handleApplyFromPreview}
-            disabled={isApplyingFromPreview}
-            className="px-6 py-3 rounded-xl bg-black text-white text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition disabled:opacity-60"
+            disabled={isApplyingFromPreview || previewAlreadyApplied}
+            className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition ${previewAlreadyApplied ? 'bg-emerald-50 text-emerald-600 cursor-not-allowed' : 'bg-black text-white hover:bg-slate-800'} disabled:opacity-60`}
           >
-            {isApplyingFromPreview ? 'Applying...' : 'Apply Now'}
+            {previewAlreadyApplied ? 'Pending Approval' : isApplyingFromPreview ? 'Applying...' : 'Apply Now'}
           </button>
         </div>
       </div>
@@ -1717,29 +1818,53 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                 <div className="w-1.5 h-6 bg-black rounded-full"></div>
                 <h4 className="text-sm font-black uppercase italic tracking-widest">Primary Identity & Academics</h4>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-4">
-                  <input type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs border border-transparent focus:border-slate-200 transition-all" value={profile.fullName} onChange={(e)=>setProfile({...profile, fullName: e.target.value})}/>
-                  <input type="text" placeholder="Enrollment Number" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs border border-transparent focus:border-slate-200 transition-all" value={profile.enrollmentNo} onChange={(e)=>setProfile({...profile, enrollmentNo: e.target.value})}/>
-                  <div className="grid grid-cols-2 gap-4">
-                    <input type="text" placeholder="Admission Year" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.admissionYear} onChange={(e)=>setProfile({...profile, admissionYear: e.target.value})}/>
-                    <input type="text" placeholder="Graduation Year" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.graduationYear} onChange={(e)=>setProfile({...profile, graduationYear: e.target.value})}/>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Full Name</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs border border-transparent focus:border-slate-200 transition-all" value={profile.fullName} onChange={(e)=>setProfile({...profile, fullName: e.target.value})}/>
                 </div>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <input type="text" placeholder="Department" className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.department} onChange={(e)=>setProfile({...profile, department: e.target.value})}/>
-                    <input type="number" placeholder="Semester (e.g., 8)" className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.semester} onChange={(e)=>setProfile({...profile, semester: e.target.value ? Number(e.target.value) : ''})}/>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <input type="text" placeholder="Branch" className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.branch} onChange={(e)=>setProfile({...profile, branch: e.target.value})}/>
-                    <select className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-500" value={profile.specialization} onChange={(e)=>setProfile({...profile, specialization: e.target.value})}>
-                      <option value="">Specialization</option>
-                      <option value="CSE">CSE</option><option value="IT">IT</option><option value="AI">AI/ML</option>
-                    </select>
-                    <input type="text" placeholder="CGPA" className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs border border-transparent focus:border-emerald-200" value={profile.cgpa} onChange={(e)=>setProfile({...profile, cgpa: e.target.value})}/>
-                  </div>
-                  <input type="text" placeholder="Professional Skills (React, Python...)" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold text-xs" value={profile.skills} onChange={(e)=>setProfile({...profile, skills: e.target.value})}/>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Enrollment Number</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs border border-transparent focus:border-slate-200 transition-all" value={profile.enrollmentNo} onChange={(e)=>setProfile({...profile, enrollmentNo: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Department</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.department} onChange={(e)=>setProfile({...profile, department: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Branch / Course</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.branch} onChange={(e)=>setProfile({...profile, branch: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Admission Year</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.admissionYear} onChange={(e)=>setProfile({...profile, admissionYear: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Graduation Year</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs" value={profile.graduationYear} onChange={(e)=>setProfile({...profile, graduationYear: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Semester Start Date</label>
+                  <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-500" value={profile.semesterStartDate} onChange={(e)=>setProfile({...profile, semesterStartDate: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Current Semester</label>
+                  <input type="number" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold text-xs text-slate-500" value={calculateSemesterFromStartDate(profile.semesterStartDate, profile.branch) || profile.semester || ''} readOnly/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Specialization</label>
+                  <select className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-500" value={profile.specialization} onChange={(e)=>setProfile({...profile, specialization: e.target.value})}>
+                    <option value="">Specialization</option>
+                    <option value="CSE">CSE</option><option value="IT">IT</option><option value="AI">AI/ML</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">CGPA</label>
+                  <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs border border-transparent focus:border-emerald-200" value={profile.cgpa} onChange={(e)=>setProfile({...profile, cgpa: e.target.value})}/>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Professional Skills</label>
+                  <input type="text" placeholder="React, Python, Node.js..." className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold text-xs" value={profile.skills} onChange={(e)=>setProfile({...profile, skills: e.target.value})}/>
                 </div>
               </div>
             </section>

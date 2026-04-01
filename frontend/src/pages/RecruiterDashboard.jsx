@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from '../api/axios';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
+import { validateProfilePayload } from '../utils/profileValidation';
 import {
   Briefcase, Users, Plus, X, Search, Filter, Eye, ChevronDown,
   MapPin, Clock, DollarSign, CheckCircle2, XCircle, Mail, FileText,
@@ -61,9 +62,13 @@ const [interviewForm, setInterviewForm] = useState({
     companyLocation: '',
     companyAddress: '',
     companyDescription: '',
+    linkedinUrl: '',
+    githubUrl: '',
+    portfolioUrl: '',
   });
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
   const StatCard = ({ icon: Icon, label, value, color }) => (
   <div className="bg-white rounded-2xl shadow-md hover:shadow-xl transition p-6 flex items-center gap-5">
     <div className={`${color} p-4 rounded-xl text-white shadow`}>
@@ -103,6 +108,9 @@ const [interviewForm, setInterviewForm] = useState({
         companyLocation: data.companyLocation || '',
         companyAddress: data.companyAddress || '',
         companyDescription: data.companyDescription || '',
+        linkedinUrl: data.linkedinUrl || data.linkedin || '',
+        githubUrl: data.githubUrl || data.github || '',
+        portfolioUrl: data.portfolioUrl || '',
       };
 
       setRecruiterProfile(nextProfile);
@@ -130,7 +138,13 @@ const [interviewForm, setInterviewForm] = useState({
     e.preventDefault();
     try {
       setSavingProfile(true);
+      setProfileFeedback({ type: '', message: '' });
       const payload = { ...recruiterProfile };
+      const validationError = validateProfilePayload(payload);
+      if (validationError) {
+        setProfileFeedback({ type: 'error', message: validationError });
+        return;
+      }
       const res = await axios.put('/api/profile', payload);
       const updated = res.data || {};
 
@@ -147,6 +161,9 @@ const [interviewForm, setInterviewForm] = useState({
         companyLocation: updated.companyLocation || '',
         companyAddress: updated.companyAddress || '',
         companyDescription: updated.companyDescription || '',
+        linkedinUrl: updated.linkedinUrl || updated.linkedin || '',
+        githubUrl: updated.githubUrl || updated.github || '',
+        portfolioUrl: updated.portfolioUrl || '',
       }));
 
       setJobForm((prev) => ({
@@ -159,9 +176,9 @@ const [interviewForm, setInterviewForm] = useState({
         companyTechDomain: updated.companyTechDomain || recruiterProfile.companyTechDomain || prev.companyTechDomain,
       }));
 
-      alert('Company profile saved successfully');
+      setProfileFeedback({ type: 'success', message: 'Company profile saved successfully.' });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save company profile');
+      setProfileFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to save company profile.' });
     } finally {
       setSavingProfile(false);
     }
@@ -526,6 +543,24 @@ const handleCancelInterview = async (applicationId) => {
                         onChange={(v) => handleRecruiterProfileChange('companyWebsite', v)}
                         placeholder="https://yourcompany.com"
                       />
+                      <Input
+                        label="LinkedIn URL"
+                        value={recruiterProfile.linkedinUrl}
+                        onChange={(v) => handleRecruiterProfileChange('linkedinUrl', v)}
+                        placeholder="https://linkedin.com/in/..."
+                      />
+                      <Input
+                        label="GitHub URL"
+                        value={recruiterProfile.githubUrl}
+                        onChange={(v) => handleRecruiterProfileChange('githubUrl', v)}
+                        placeholder="https://github.com/..."
+                      />
+                      <Input
+                        label="Portfolio / Website"
+                        value={recruiterProfile.portfolioUrl}
+                        onChange={(v) => handleRecruiterProfileChange('portfolioUrl', v)}
+                        placeholder="https://your-portfolio.com"
+                      />
                     </div>
                   </div>
 
@@ -578,6 +613,15 @@ const handleCancelInterview = async (applicationId) => {
                       <Globe size={14} />
                       This information can be used in recruiter branding and job visibility.
                     </div>
+                  </div>
+
+                  {profileFeedback.message && (
+                    <div className={`rounded-lg px-3 py-2 text-sm font-medium ${profileFeedback.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                      {profileFeedback.message}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
                     <button
                       type="submit"
                       disabled={savingProfile || profileLoading}

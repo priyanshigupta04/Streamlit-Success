@@ -20,6 +20,7 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const mentorRoutes = require("./routes/mentorRoutes");
 const internshipFormRoutes = require("./routes/internshipFormRoutes");
 const reviewScheduleRoutes = require("./routes/reviewScheduleRoutes");
+const { startJobLifecycleService } = require('./services/jobLifecycleService');
 
 dotenv.config();
 connectDB();
@@ -70,6 +71,7 @@ const ensurePlacementCellAccount = async () => {
 };
 
 ensurePlacementCellAccount();
+startJobLifecycleService();
 
 const app = express();
 app.use(cors());

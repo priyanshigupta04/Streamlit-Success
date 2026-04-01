@@ -2,6 +2,7 @@ const Job = require("../models/Job");
 const Notification = require("../models/Notification");
 const Application = require("../models/Application");
 const User = require("../models/User");
+const { getExpiryVisibilityFilter } = require('../services/jobLifecycleService');
 
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
 
@@ -190,6 +191,8 @@ exports.createJob = async (req, res) => {
             deadline, eligibility,
             companyAddress, companyCity, companyState, companyWebsite, companyTechDomain } = req.body;
 
+    const initialStatus = isExpiredDeadline(deadline) ? 'closed' : 'open';
+
     const job = await Job.create({
       title, company, type, domain, description,
       requiredSkills: requiredSkills || [],
@@ -197,7 +200,7 @@ exports.createJob = async (req, res) => {
       companyAddress, companyCity, companyState, companyWebsite, companyTechDomain,
       postedBy: req.user._id,
       jdText: description,
-      status: 'open',
+      status: initialStatus,
       approvalStatus: 'pending',
     });
 
@@ -233,6 +236,7 @@ exports.getJobs = async (req, res) => {
   try {
     const { status, type, domain, search } = req.query;
     const filter = {};
+    const andFilters = [];
     
     if (status) filter.status = status;
     if (type) filter.type = type;
@@ -240,11 +244,15 @@ exports.getJobs = async (req, res) => {
 
     // Build approval status filter
     if (!req.user || req.user.role !== 'placement_cell') {
-      // Students & others see: approved jobs OR (pending jobs that are still open)
-      filter.$or = [
-        { approvalStatus: 'approved' },
-        { approvalStatus: 'pending', status: 'open' }
-      ];
+      // Students & others see non-expired, open jobs with allowed approval states.
+      andFilters.push({
+        $or: [
+          { approvalStatus: 'approved' },
+          { approvalStatus: 'pending', status: 'open' }
+        ]
+      });
+      andFilters.push({ status: 'open' });
+      andFilters.push(getExpiryVisibilityFilter(new Date()));
     }
     // placement_cell sees all regardless of approval status
 
@@ -256,16 +264,11 @@ exports.getJobs = async (req, res) => {
         { description: { $regex: search, $options: 'i' } },
       ];
       
-      // Combine with existing $or if it exists
-      if (filter.$or) {
-        filter.$and = [
-          { $or: filter.$or },
-          { $or: searchFilter }
-        ];
-        delete filter.$or;
-      } else {
-        filter.$or = searchFilter;
-      }
+      andFilters.push({ $or: searchFilter });
+    }
+
+    if (andFilters.length > 0) {
+      filter.$and = andFilters;
     }
 
     const jobs = await Job.find(filter)
@@ -303,6 +306,10 @@ exports.updateJob = async (req, res) => {
       'companyAddress','companyCity','companyState','companyWebsite','companyTechDomain'];
     allowed.forEach(f => { if (req.body[f] !== undefined) job[f] = req.body[f]; });
     if (req.body.description) job.jdText = req.body.description;
+
+    if (isExpiredDeadline(job.deadline)) {
+      job.status = 'closed';
+    }
 
     await job.save();
     res.json({ job });
@@ -411,7 +418,11 @@ exports.getMyJobs = async (req, res) => {
 exports.getRecommendedJobs = async (req, res) => {
   try {
     // 1. Fetch available jobs
-    const jobs = await Job.find({ status: 'open', approvalStatus: 'approved' })
+    const jobs = await Job.find({
+      status: 'open',
+      approvalStatus: 'approved',
+      ...getExpiryVisibilityFilter(new Date()),
+    })
       .populate('postedBy', 'name companyName')
       .sort({ createdAt: -1 });
 
@@ -620,4 +631,11 @@ exports.updateStudentApplications = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Server error" });
   }
+};
+
+const isExpiredDeadline = (deadlineValue) => {
+  if (!deadlineValue) return false;
+  const parsed = new Date(deadlineValue);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed < new Date();
 };

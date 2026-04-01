@@ -1,7 +1,9 @@
 const axios  = require('axios');
 const crypto = require('crypto');
+const path = require('path');
 const User   = require('../models/User');
 const Notification = require('../models/Notification');
+const AI_BASE = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 const buildSenderMeta = (req) => ({
   sender: {
@@ -11,6 +13,26 @@ const buildSenderMeta = (req) => ({
   },
 });
 
+const ensureImageUpload = (file) => {
+  if (!file) return 'No file received';
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const mime = String(file.mimetype || '').toLowerCase();
+  const validExt = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+  const validMime = ['image/jpeg', 'image/png', 'image/webp'].includes(mime);
+  if (!validExt || !validMime) return 'Invalid image file type';
+  return null;
+};
+
+const ensurePdfUpload = (file) => {
+  if (!file) return 'No file received';
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const mime = String(file.mimetype || '').toLowerCase();
+  const validExt = ext === '.pdf';
+  const validMime = ['application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(mime);
+  if (!validExt || !validMime) return 'Invalid PDF file type';
+  return null;
+};
+
 // ─────────────────────────────────────────────
 //  POST /api/upload/image
 //  Uploads profile picture to Cloudinary and
@@ -18,9 +40,14 @@ const buildSenderMeta = (req) => ({
 // ─────────────────────────────────────────────
 const uploadProfileImage = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: 'No file received' });
+    const uploadError = ensureImageUpload(req.file);
+    if (uploadError) return res.status(400).json({ message: uploadError });
 
-    const imageUrl = req.file.path; // Cloudinary secure_url
+    const imageUrl = req.file.secure_url || req.file.url || req.file.path;
+    if (!imageUrl) {
+      console.error('uploadProfileImage: Cloudinary returned no URL', req.file);
+      return res.status(500).json({ message: 'Image uploaded but URL was not returned by Cloudinary' });
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
@@ -42,9 +69,9 @@ const uploadProfileImage = async (req, res) => {
 // ─────────────────────────────────────────────
 const uploadResume = async (req, res) => {
   try {
-    if (!req.file) {
-      // multer didn't pick up the file (wrong field name, bad headers, etc.)
-      return res.status(400).json({ message: 'No file received. Make sure you are uploading a PDF under 10 MB with field name `resume`.' });
+    const uploadError = ensurePdfUpload(req.file);
+    if (uploadError) {
+      return res.status(400).json({ message: `${uploadError}. Make sure you are uploading a PDF under 10 MB with field name resume.` });
     }
 
     // cloudinary multer storage can populate `path`, `secure_url` or `url`
@@ -63,7 +90,7 @@ const uploadResume = async (req, res) => {
     try {
       // Ask Python service to download + parse the PDF
       const pyResponse = await axios.post(
-        'http://localhost:8000/parse-resume-url',
+        `${AI_BASE}/parse-resume-url`,
         { resume_url: resumeUrl },
         { timeout: 30000 }
       );
@@ -105,7 +132,6 @@ const uploadResume = async (req, res) => {
     // send back helpful information in development
     const response = { message: 'Resume upload failed' };
     if (err.message) response.error = err.message;
-    if (err.stack) response.stack = err.stack;
     // if it's an axios error, include response data
     if (err.response) {
       response.remote = err.response.data || err.response.statusText;
@@ -127,9 +153,10 @@ const uploadOfferLetter = async (req, res) => {
     console.log('║ User:', req.user.name, '(' + req.user._id + ')');
     console.log('╚════════════════════════════════════════════╝');
     
-    if (!req.file) {
-      console.log('❌ No file received');
-      return res.status(400).json({ message: 'No file received. Make sure you are uploading a PDF under 10 MB with field name offerLetter.' });
+    const uploadError = ensurePdfUpload(req.file);
+    if (uploadError) {
+      console.log('❌ Offer letter upload validation failed:', uploadError);
+      return res.status(400).json({ message: `${uploadError}. Make sure you are uploading a PDF under 10 MB with field name offerLetter.` });
     }
 
     console.log('✅ File received:', req.file.originalname);

@@ -11,7 +11,18 @@ const {
 } = require('../controllers/uploadController');
 
 // POST /api/upload/image  — upload profile picture
-router.post('/image',  protect, uploadImage.single('image'),   uploadProfileImage);
+router.post('/image', protect, (req, res, next) => {
+  uploadImage.single('image')(req, res, err => {
+    if (err) {
+      console.error('Multer error on image upload:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'Image exceeds 5 MB limit' });
+      }
+      return res.status(400).json({ message: err.message });
+    }
+    next();
+  });
+}, uploadProfileImage);
 
 // POST /api/upload/resume — upload PDF resume + trigger AI parse
 // we wrap multer call to capture errors (file size too large etc.) and send

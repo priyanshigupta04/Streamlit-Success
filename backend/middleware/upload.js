@@ -1,6 +1,30 @@
 const multer = require('multer');
+const path = require('path');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('../config/cloudinary');
+
+const allowedImageExt = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const allowedImageMime = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+const isPdfFile = (file) => {
+  const ext = path.extname(file?.originalname || '').toLowerCase();
+  const mime = String(file?.mimetype || '').toLowerCase();
+  const extOk = ext === '.pdf';
+  const mimeOk = ['application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(mime);
+  return extOk && mimeOk;
+};
+
+const imageFileFilter = (req, file, cb) => {
+  const ext = path.extname(file?.originalname || '').toLowerCase();
+  const mime = String(file?.mimetype || '').toLowerCase();
+  if (allowedImageExt.has(ext) && allowedImageMime.has(mime)) return cb(null, true);
+  return cb(new Error('Only JPG, JPEG, PNG, and WEBP image files are allowed'));
+};
+
+const pdfFileFilter = (req, file, cb) => {
+  if (isPdfFile(file)) return cb(null, true);
+  return cb(new Error('Only PDF files are allowed'));
+};
 
 // --- Profile Image Storage ---
 const imageStorage = new CloudinaryStorage({
@@ -37,8 +61,8 @@ const offerLetterStorage = new CloudinaryStorage({
   },
 });
 
-const uploadImage  = multer({ storage: imageStorage,  limits: { fileSize: 5 * 1024 * 1024 } });
-const uploadResume = multer({ storage: resumeStorage, limits: { fileSize: 10 * 1024 * 1024 } });
-const uploadOfferLetter = multer({ storage: offerLetterStorage, limits: { fileSize: 10 * 1024 * 1024 } });
+const uploadImage  = multer({ storage: imageStorage, fileFilter: imageFileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadResume = multer({ storage: resumeStorage, fileFilter: pdfFileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+const uploadOfferLetter = multer({ storage: offerLetterStorage, fileFilter: pdfFileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
 module.exports = { uploadImage, uploadResume, uploadOfferLetter };

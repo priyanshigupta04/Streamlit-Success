@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from '../api/axios';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Users, Bell, FileCheck, BarChart3, Users as UsersIcon, ShieldCheck, GraduationCap, ClipboardList, Search, RefreshCw } from 'lucide-react';
+import { validateProfilePayload } from '../utils/profileValidation';
+import { LayoutDashboard, Users, Bell, FileCheck, BarChart3, Users as UsersIcon, ShieldCheck, GraduationCap, ClipboardList, Search, RefreshCw, UserCircle2 } from 'lucide-react';
 import DashboardSection from '../components/PlacementCell/DashboardSection';
 import UserManagementSection from '../components/PlacementCell/UserManagementSection';
 import BroadcastSection from '../components/PlacementCell/BroadcastSection';
@@ -10,9 +11,9 @@ import JobApprovalsSection from '../components/PlacementCell/JobApprovalsSection
 import AnalyticsSection from '../components/PlacementCell/AnalyticsSection';
 import MentorManagementSection from '../components/PlacementCell/MentorManagementSection';
 
-const PlacementCellDashboard = () => {
-  const DEPARTMENT_OPTIONS = ['SOCSET', 'SOTE', 'SOB', 'SAAD'];
+const DEPARTMENT_OPTIONS = ['SOCSET', 'SOTE', 'SOB', 'SAAD'];
 
+const PlacementCellDashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState(null);
@@ -42,11 +43,83 @@ const PlacementCellDashboard = () => {
   const [deletingDocumentId, setDeletingDocumentId] = useState('');
   const [deletingInternshipId, setDeletingInternshipId] = useState('');
   const [deletingOfferStudentId, setDeletingOfferStudentId] = useState('');
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    bio: '',
+    universityName: '',
+    designation: '',
+    officeLocation: '',
+    officeContact: '',
+    supportEmail: '',
+    linkedinUrl: '',
+    githubUrl: '',
+    portfolioUrl: '',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
     fetchStats();
     fetchUsers();
+    fetchMyProfile();
   }, []);
+
+  const fetchMyProfile = async () => {
+    try {
+      const res = await axios.get('/api/profile');
+      const data = res.data || {};
+      setProfileForm({
+        name: data.name || user?.name || '',
+        email: data.email || user?.email || '',
+        phone: data.phone || data.contact || '',
+        bio: data.bio || '',
+        universityName: data.universityName || '',
+        designation: data.designation || '',
+        officeLocation: data.officeLocation || '',
+        officeContact: data.officeContact || '',
+        supportEmail: data.supportEmail || '',
+        linkedinUrl: data.linkedinUrl || data.linkedin || '',
+        githubUrl: data.githubUrl || data.github || '',
+        portfolioUrl: data.portfolioUrl || '',
+      });
+    } catch (err) {
+      console.error('Failed to fetch placement profile', err);
+    }
+  };
+
+  const saveMyProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setProfileSaving(true);
+      setProfileFeedback({ type: '', message: '' });
+      const payload = {
+        name: profileForm.name,
+        phone: profileForm.phone,
+        bio: profileForm.bio,
+        universityName: profileForm.universityName,
+        designation: profileForm.designation,
+        officeLocation: profileForm.officeLocation,
+        officeContact: profileForm.officeContact,
+        supportEmail: profileForm.supportEmail,
+        linkedinUrl: profileForm.linkedinUrl,
+        githubUrl: profileForm.githubUrl,
+        portfolioUrl: profileForm.portfolioUrl,
+      };
+      const validationError = validateProfilePayload(payload);
+      if (validationError) {
+        setProfileFeedback({ type: 'error', message: validationError });
+        return;
+      }
+      await axios.put('/api/profile', payload);
+      setProfileFeedback({ type: 'success', message: 'Profile updated successfully.' });
+    } catch (err) {
+      setProfileFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to update profile.' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -101,6 +174,7 @@ const PlacementCellDashboard = () => {
 
   const tabs = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'my_profile', label: 'My Profile', icon: UserCircle2 },
     { key: 'users', label: 'User Management', icon: Users },
     { key: 'broadcast', label: 'Broadcast', icon: Bell },
     { key: 'approvals', label: 'Job Approvals', icon: FileCheck },
@@ -358,7 +432,11 @@ const PlacementCellDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-50">
-      <Navbar />
+      <Navbar
+        showProfileDropdown
+        profileName={profileForm.name || user?.name}
+        onProfileClick={() => setActiveTab('my_profile')}
+      />
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-72 bg-white/90 backdrop-blur border-r border-slate-200 min-h-[calc(100vh-64px)] p-5 shadow-lg">
@@ -382,6 +460,144 @@ const PlacementCellDashboard = () => {
         <main className="flex-1 p-6 md:p-8">
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && <DashboardSection stats={stats} />}
+
+          {activeTab === 'my_profile' && (
+            <div className="max-w-3xl">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8">
+                <h2 className="text-2xl font-black text-slate-900 mb-1">Placement Cell Profile</h2>
+                <p className="text-sm text-slate-500 mb-6">Manage your profile details shown across notifications and approvals.</p>
+                <form onSubmit={saveMyProfile} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.name}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={profileForm.email}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 text-slate-500"
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Phone</label>
+                      <input
+                        type="text"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">University Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.universityName}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, universityName: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Designation</label>
+                      <input
+                        type="text"
+                        value={profileForm.designation}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, designation: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Office Location</label>
+                      <input
+                        type="text"
+                        value={profileForm.officeLocation}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, officeLocation: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Office Contact</label>
+                      <input
+                        type="text"
+                        value={profileForm.officeContact}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, officeContact: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Support Email</label>
+                      <input
+                        type="email"
+                        value={profileForm.supportEmail}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, supportEmail: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">LinkedIn URL</label>
+                      <input
+                        type="url"
+                        value={profileForm.linkedinUrl}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                        placeholder="https://linkedin.com/in/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">GitHub URL</label>
+                      <input
+                        type="url"
+                        value={profileForm.githubUrl}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, githubUrl: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                        placeholder="https://github.com/..."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Portfolio / Website</label>
+                      <input
+                        type="url"
+                        value={profileForm.portfolioUrl}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, portfolioUrl: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                        placeholder="https://your-website.com"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Bio</label>
+                    <textarea
+                      value={profileForm.bio}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, bio: e.target.value }))}
+                      rows={4}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+                      placeholder="Add a short profile summary"
+                    />
+                  </div>
+                  {profileFeedback.message && (
+                    <div className={`rounded-lg px-3 py-2 text-sm font-medium ${profileFeedback.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                      {profileFeedback.message}
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={profileSaving}
+                    className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-60"
+                  >
+                    {profileSaving ? 'Saving...' : 'Save Profile'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* USERS TAB */}
           {activeTab === 'users' && (
