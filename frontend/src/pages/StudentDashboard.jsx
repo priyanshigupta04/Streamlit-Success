@@ -731,15 +731,8 @@ const StudentDashboard = () => {
   const [jobs, setJobs] = useState([]);
   const [selectedJobPreview, setSelectedJobPreview] = useState(null);
   const [isApplyingFromPreview, setIsApplyingFromPreview] = useState(false);
-  // IDs of jobs the student has already applied to
-  const appliedJobIds = new Set(
-    myApplications
-      .map(a => a.jobId || a.id)  // use jobId if available
-      .filter(Boolean)
-  );
 
   const filteredJobs = jobs
-    .filter(job => !appliedJobIds.has(job.id))   // hide already-applied jobs
     .filter(job =>
       job.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.company.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1085,6 +1078,11 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                 </button>
               </div>
             );})}
+            {filteredJobs.length === 0 && (
+              <div className="md:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200/60 text-center">
+                <p className="text-sm font-bold text-slate-500">No roles found for the current search.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
