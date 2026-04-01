@@ -1069,7 +1069,7 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
             </div>
           </div>
           {/* Log History */}
-          <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200">
+          <div className="bg-white rounded-[2.6rem] p-10 border border-slate-200">
             {logs.map((log) => (
               <div key={log.id} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] mb-4">
                 <div className="flex items-center gap-6">
