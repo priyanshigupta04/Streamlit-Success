@@ -294,7 +294,25 @@ const StudentDashboard = () => {
         return 0;
       });
 
-      setJobs(mapped);
+      // If AI service returns an empty recommendation list, fall back to open jobs.
+      if (mapped.length === 0) {
+        const fallbackRes = await axios.get('/api/jobs');
+        const fallbackMapped = (fallbackRes.data.jobs || []).map((j) => ({
+          id: j._id,
+          company: j.company,
+          role: j.title,
+          loc: j.location || '',
+          pay: j.stipend || '',
+          logo: (j.company || '?')[0].toUpperCase(),
+          color: 'bg-slate-700',
+          matchData: j.matchData || null,
+          raw: j,
+        }));
+        setJobs(fallbackMapped);
+      } else {
+        setJobs(mapped);
+      }
+
       if (res.data.ai?.analysis) {
         setAiAnalysis(res.data.ai.analysis);
       }
@@ -315,6 +333,27 @@ const StudentDashboard = () => {
       }
     } catch (err) {
       console.error('Failed to load recommended jobs', err);
+      try {
+        const fallbackRes = await axios.get('/api/jobs');
+        const fallbackMapped = (fallbackRes.data.jobs || []).map((j) => ({
+          id: j._id,
+          company: j.company,
+          role: j.title,
+          loc: j.location || '',
+          pay: j.stipend || '',
+          logo: (j.company || '?')[0].toUpperCase(),
+          color: 'bg-slate-700',
+          matchData: j.matchData || null,
+          raw: j,
+        }));
+        setJobs(fallbackMapped);
+        setAiMeta({
+          serviceStatus: { analysis: 'failed', recommendation: 'fallback' },
+          warnings: ['AI recommendation timeout. Showing open jobs fallback list.'],
+        });
+      } catch (fallbackErr) {
+        console.error('Failed to load fallback open jobs', fallbackErr);
+      }
       if (retryAttempt < 3) {
         const delayMs = 4000 * (retryAttempt + 1);
         aiRetryTimerRef.current = setTimeout(() => {
