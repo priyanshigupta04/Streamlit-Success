@@ -266,24 +266,25 @@ const StudentDashboard = () => {
   }, []);
 
   const fetchJobs = async (retryAttempt = 0) => {
+    setJobsLoading(true);
     try {
       if (aiRetryTimerRef.current) {
         clearTimeout(aiRetryTimerRef.current);
         aiRetryTimerRef.current = null;
       }
 
-      const res = await axios.get('/api/jobs/recommended');
-      const mapped = (res.data.jobs || []).map(j => ({
-        id: j._id,
-        company: j.company,
-        role: j.title,
-        loc: j.location || '',
-        pay: j.stipend || '',
-        logo: (j.company || '?')[0].toUpperCase(),
-        color: 'bg-slate-700',
-        matchData: j.matchData || null,
-        raw: j,
-      }));
+      // 1) Load open jobs first so users see cards quickly on live.
+      const fallbackRes = await axios.get('/api/jobs');
+      const fallbackMapped = mapJobsToCards(fallbackRes.data.jobs || []);
+      setJobs(fallbackMapped);
+
+      // 2) Then attempt AI-ranked jobs with strict timeout in background.
+      const controller = new AbortController();
+      const aiTimeout = setTimeout(() => controller.abort(), 12000);
+      const res = await axios.get('/api/jobs/recommended', { signal: controller.signal });
+      clearTimeout(aiTimeout);
+
+      const mapped = mapJobsToCards(res.data.jobs || []);
 
       mapped.sort((a, b) => {
         const aScore = a.matchData?.overallScore;
@@ -294,28 +295,14 @@ const StudentDashboard = () => {
         return 0;
       });
 
-      // If AI service returns an empty recommendation list, fall back to open jobs.
-      if (mapped.length === 0) {
-        const fallbackRes = await axios.get('/api/jobs');
-        const fallbackMapped = (fallbackRes.data.jobs || []).map((j) => ({
-          id: j._id,
-          company: j.company,
-          role: j.title,
-          loc: j.location || '',
-          pay: j.stipend || '',
-          logo: (j.company || '?')[0].toUpperCase(),
-          color: 'bg-slate-700',
-          matchData: j.matchData || null,
-          raw: j,
-        }));
-        setJobs(fallbackMapped);
-      } else {
+      if (mapped.length > 0) {
         setJobs(mapped);
       }
 
       if (res.data.ai?.analysis) {
         setAiAnalysis(res.data.ai.analysis);
       }
+
       const nextMeta = res.data.ai?.meta || null;
       setAiMeta(nextMeta);
 
@@ -335,17 +322,7 @@ const StudentDashboard = () => {
       console.error('Failed to load recommended jobs', err);
       try {
         const fallbackRes = await axios.get('/api/jobs');
-        const fallbackMapped = (fallbackRes.data.jobs || []).map((j) => ({
-          id: j._id,
-          company: j.company,
-          role: j.title,
-          loc: j.location || '',
-          pay: j.stipend || '',
-          logo: (j.company || '?')[0].toUpperCase(),
-          color: 'bg-slate-700',
-          matchData: j.matchData || null,
-          raw: j,
-        }));
+        const fallbackMapped = mapJobsToCards(fallbackRes.data.jobs || []);
         setJobs(fallbackMapped);
         setAiMeta({
           serviceStatus: { analysis: 'failed', recommendation: 'fallback' },
@@ -354,12 +331,15 @@ const StudentDashboard = () => {
       } catch (fallbackErr) {
         console.error('Failed to load fallback open jobs', fallbackErr);
       }
+
       if (retryAttempt < 3) {
         const delayMs = 4000 * (retryAttempt + 1);
         aiRetryTimerRef.current = setTimeout(() => {
           fetchJobs(retryAttempt + 1);
         }, delayMs);
       }
+    } finally {
+      setJobsLoading(false);
     }
   };
 
@@ -747,6 +727,7 @@ const StudentDashboard = () => {
   // 4. JOBS & APPLICATIONS STATE
   const [myApplications, setMyApplications] = useState([]);
   const [deletingApplicationId, setDeletingApplicationId] = useState('');
+  const [jobsLoading, setJobsLoading] = useState(false);
 
   const handleDeleteApplication = async (applicationId) => {
     const ok = window.confirm('Delete this application from submission history?');
@@ -770,6 +751,19 @@ const StudentDashboard = () => {
   const [jobs, setJobs] = useState([]);
   const [selectedJobPreview, setSelectedJobPreview] = useState(null);
   const [isApplyingFromPreview, setIsApplyingFromPreview] = useState(false);
+
+  const mapJobsToCards = (jobList = []) =>
+    jobList.map((j) => ({
+      id: j._id,
+      company: j.company,
+      role: j.title,
+      loc: j.location || '',
+      pay: j.stipend || '',
+      logo: (j.company || '?')[0].toUpperCase(),
+      color: 'bg-slate-700',
+      matchData: j.matchData || null,
+      raw: j,
+    }));
 
   const filteredJobs = jobs
     .filter(job =>
@@ -1117,7 +1111,12 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                 </button>
               </div>
             );})}
-            {filteredJobs.length === 0 && (
+            {jobsLoading && (
+              <div className="md:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200/60 text-center">
+                <p className="text-sm font-bold text-slate-500">Loading opportunities...</p>
+              </div>
+            )}
+            {!jobsLoading && filteredJobs.length === 0 && (
               <div className="md:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200/60 text-center">
                 <p className="text-sm font-bold text-slate-500">No roles found for the current search.</p>
               </div>
