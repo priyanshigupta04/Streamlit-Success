@@ -4,9 +4,9 @@ const Application = require("../models/Application");
 const User = require("../models/User");
 const { getExpiryVisibilityFilter } = require('../services/jobLifecycleService');
 
-// Keep AI calls fail-fast so student dashboard can still show fallback recommendations quickly.
-const AI_TIMEOUT_MS = Math.min(Number(process.env.AI_TIMEOUT_MS || 8000), 20000);
-const AI_PARSE_TIMEOUT_MS = Math.min(Number(process.env.AI_PARSE_TIMEOUT_MS || 5000), 10000);
+// Keep defaults reasonable, but allow production to increase via env for cold starts.
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
+const AI_PARSE_TIMEOUT_MS = Number(process.env.AI_PARSE_TIMEOUT_MS || 30000);
 const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
 const LOCAL_AI_SERVICE_URL = 'http://localhost:8000';
 
