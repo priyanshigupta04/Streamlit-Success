@@ -10,6 +10,7 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
   const [showConfirm, setShowConfirm] = useState(false);
   const [openProfileMenu, setOpenProfileMenu] = useState(false);
   const [notificationSignal, setNotificationSignal] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const profileMenuRef = useRef(null);
 
   useEffect(() => {
@@ -34,7 +35,7 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
   const tabs = [
     { id: 'dashboard', label: 'Home', icon: <LayoutDashboard size={14}/> },
     { id: 'applications', label: 'Tracking', icon: <CheckCircle2 size={14}/> },
-    { id: 'logs', label: 'Weekly Logs', icon: <FileText size={14}/> },
+    { id: 'logs', label: 'Weekly Form', icon: <FileText size={14}/> },
     { id: 'docs', label: 'Documents', icon: <Send size={14}/> }
   ];
 
@@ -84,7 +85,17 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
               className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-all"
             >
               <UserCircle2 size={30} className="text-slate-400" />
-              <span className="text-sm font-semibold text-slate-700">{profileName || profile?.fullName || 'Profile'}</span>
+              <span className="text-sm font-semibold text-slate-700 inline-flex items-center gap-2">
+                {profileName || profile?.fullName || 'Profile'}
+                {unreadNotificationCount > 0 && (
+                  <span
+                    className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-emerald-100 shadow-[0_0_0_2px_rgba(16,185,129,0.2)]"
+                    aria-label="new notifications"
+                  >
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70 animate-ping" />
+                  </span>
+                )}
+              </span>
               <ChevronDown size={16} className="text-slate-500" />
             </button>
 
@@ -105,10 +116,22 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
                     setNotificationSignal((prev) => prev + 1);
                     setOpenProfileMenu(false);
                   }}
-                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between gap-2"
                 >
-                  <Bell size={16} />
-                  Notification
+                  <span className="flex items-center gap-2">
+                    <span className="relative inline-flex">
+                      <Bell size={16} />
+                      {unreadNotificationCount > 0 && (
+                        <span className="absolute -top-2 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] leading-4 font-bold text-center">
+                          {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                        </span>
+                      )}
+                    </span>
+                    Notification
+                  </span>
+                  {unreadNotificationCount > 0 && (
+                    <span className="text-xs font-bold text-rose-600">{unreadNotificationCount}</span>
+                  )}
                 </button>
                 <button
                   onClick={() => {
@@ -145,7 +168,13 @@ const Navbar = ({ activeTab, setActiveTab, searchTerm, setSearchTerm, logout: lo
             </button>
           </>
         )}
-        {showProfileDropdown && <NotificationBell externalToggleSignal={notificationSignal} hideTrigger />}
+        {showProfileDropdown && (
+          <NotificationBell
+            externalToggleSignal={notificationSignal}
+            hideTrigger
+            onUnreadCountChange={setUnreadNotificationCount}
+          />
+        )}
       </div>
     </nav>
 

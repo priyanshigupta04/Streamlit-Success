@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import axios from '../api/axios';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
+import { validateProfilePayload } from '../utils/profileValidation';
 import {
   FileCheck, CheckCircle2, XCircle, LayoutDashboard, ArrowRight,
   AlertCircle, Award, BarChart3, Clock, Shield, Users, Download, Filter,
-  Zap, TrendingUp, Trash2,
+  Zap, TrendingUp, Trash2, UserCircle2,
 } from 'lucide-react';
 
 const DeanDashboard = () => {
@@ -47,13 +48,80 @@ const DeanDashboard = () => {
   
   // Shared Reports
   const [expandedReport, setExpandedReport] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    bio: '',
+    designation: '',
+    universityName: '',
+    officeContact: '',
+    linkedinUrl: '',
+    githubUrl: '',
+    portfolioUrl: '',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
     fetchPendingDocs();
     fetchApplications();
     fetchSharedReports();
     fetchDeanAnalytics();
+    fetchMyProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchMyProfile = async () => {
+    try {
+      const res = await axios.get('/api/profile');
+      const data = res.data || {};
+      setProfileForm({
+        name: data.name || user?.name || '',
+        email: data.email || user?.email || '',
+        phone: data.phone || data.contact || '',
+        bio: data.bio || '',
+        designation: data.designation || '',
+        universityName: data.universityName || '',
+        officeContact: data.officeContact || '',
+        linkedinUrl: data.linkedinUrl || data.linkedin || '',
+        githubUrl: data.githubUrl || data.github || '',
+        portfolioUrl: data.portfolioUrl || '',
+      });
+    } catch (err) {
+      console.error('Failed to fetch dean profile', err);
+    }
+  };
+
+  const saveMyProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setProfileSaving(true);
+      setProfileFeedback({ type: '', message: '' });
+      const payload = {
+        name: profileForm.name,
+        phone: profileForm.phone,
+        bio: profileForm.bio,
+        designation: profileForm.designation,
+        universityName: profileForm.universityName,
+        officeContact: profileForm.officeContact,
+        linkedinUrl: profileForm.linkedinUrl,
+        githubUrl: profileForm.githubUrl,
+        portfolioUrl: profileForm.portfolioUrl,
+      };
+      const validationError = validateProfilePayload(payload);
+      if (validationError) {
+        setProfileFeedback({ type: 'error', message: validationError });
+        return;
+      }
+      await axios.put('/api/profile', payload);
+      setProfileFeedback({ type: 'success', message: 'Profile updated successfully.' });
+    } catch (err) {
+      setProfileFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to update profile.' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const fetchPendingDocs = async () => {
     try {
@@ -266,6 +334,7 @@ const DeanDashboard = () => {
 
   const tabs = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'my_profile', label: 'My Profile', icon: UserCircle2 },
     { key: 'selected-students', label: 'Selected Students', icon: Award },
     { key: 'approvals', label: 'Final Approvals', icon: FileCheck },
     { key: 'shared-reports', label: 'Shared Reports', icon: Download },
@@ -419,7 +488,11 @@ const DeanDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
+      <Navbar
+        showProfileDropdown
+        profileName={profileForm.name || user?.name}
+        onProfileClick={() => setActiveTab('my_profile')}
+      />
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 bg-white border-r min-h-[calc(100vh-64px)] p-4">
@@ -507,6 +580,116 @@ const DeanDashboard = () => {
                   <p className="text-gray-500">No pending approvals</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'my_profile' && (
+            <div className="max-w-3xl">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Dean Profile</h2>
+                <p className="text-sm text-gray-500 mb-6">Update your profile details visible in institutional workflows.</p>
+                <form onSubmit={saveMyProfile} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.name}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Email</label>
+                      <input type="email" value={profileForm.email} disabled className="w-full border rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Phone</label>
+                      <input
+                        type="text"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Designation</label>
+                      <input
+                        type="text"
+                        value={profileForm.designation}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, designation: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">University Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.universityName}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, universityName: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Office Contact</label>
+                      <input
+                        type="text"
+                        value={profileForm.officeContact}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, officeContact: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">LinkedIn URL</label>
+                      <input
+                        type="url"
+                        value={profileForm.linkedinUrl}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                        placeholder="https://linkedin.com/in/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">GitHub URL</label>
+                      <input
+                        type="url"
+                        value={profileForm.githubUrl}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, githubUrl: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                        placeholder="https://github.com/..."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Portfolio / Website</label>
+                      <input
+                        type="url"
+                        value={profileForm.portfolioUrl}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, portfolioUrl: e.target.value }))}
+                        className="w-full border rounded-lg p-2.5 text-sm"
+                        placeholder="https://your-website.com"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Bio</label>
+                    <textarea
+                      rows={4}
+                      value={profileForm.bio}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, bio: e.target.value }))}
+                      className="w-full border rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                  {profileFeedback.message && (
+                    <div className={`rounded-lg px-3 py-2 text-sm font-medium ${profileFeedback.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                      {profileFeedback.message}
+                    </div>
+                  )}
+                  <button type="submit" disabled={profileSaving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60">
+                    {profileSaving ? 'Saving...' : 'Save Profile'}
+                  </button>
+                </form>
+              </div>
             </div>
           )}
 

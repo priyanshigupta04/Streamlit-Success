@@ -12,7 +12,6 @@ const DEPARTMENTS = [
 const MentorManagementSection = () => {
   const [mentors, setMentors] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [editingDept, setEditingDept] = useState(null);
   const [formData, setFormData] = useState({ fullName: '', email: '' });
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' or 'edit'

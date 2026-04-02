@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const axios = require('axios');
 const User = require('../models/User');
 
-const AI_BASE = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
+const AI_BASE = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
 
 async function run() {
   await mongoose.connect(process.env.MONGO_URI);

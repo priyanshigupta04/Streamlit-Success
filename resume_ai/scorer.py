@@ -7,7 +7,14 @@ from similarity_engine import SimilarityEngine
 from skill_extractor import extract_skills
 from domain_model import predict_domain_vector
 
-_sim_engine = SimilarityEngine()
+_sim_engine = None
+
+
+def _get_similarity_engine():
+    global _sim_engine
+    if _sim_engine is None:
+        _sim_engine = SimilarityEngine()
+    return _sim_engine
 
 
 def _skill_overlap_score(resume_skills, job_skills):
@@ -64,9 +71,10 @@ def score_student_vs_job(resume_text, job, profile_completeness=100):
     jd_text = job.get("jdText", job.get("description", ""))
     required_skills = job.get("requiredSkills", [])
     job_domain = job.get("domain", "")
+    sim_engine = _get_similarity_engine()
 
     # 1. Semantic similarity (40%)
-    semantic = float(_sim_engine.compute_similarity(resume_text, jd_text)) if jd_text else 50.0
+    semantic = float(sim_engine.compute_similarity(resume_text, jd_text)) if jd_text else 50.0
     semantic = max(0.0, min(100.0, semantic))
 
     # 2. Skill overlap (35%)

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import axios from '../api/axios';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
+import { validateProfilePayload } from '../utils/profileValidation';
 import {
   Users, BookOpen, CheckCircle2, Clock,
   LayoutDashboard, ArrowRight, Search, Eye,
   MessageSquare, Calendar, Trash2,
+  UserCircle2,
 } from 'lucide-react';
 
 const LOG_STATUS_COLORS = {
@@ -43,12 +45,84 @@ const InternalGuideDashboard = () => {
   const [remindingAll, setRemindingAll] = useState(false);
   const [remindingStudentId, setRemindingStudentId] = useState('');
   const [notifyingSchedule, setNotifyingSchedule] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    department: '',
+    phone: '',
+    bio: '',
+    specialization: '',
+    expertiseTags: '',
+    preferredReviewDay: '',
+    preferredReviewTime: '',
+    linkedinUrl: '',
+    githubUrl: '',
+    portfolioUrl: '',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
 
   // Fetch students assigned to this guide
   useEffect(() => {
     fetchStudents();
     fetchAllGuideLogs();
+    fetchMyProfile();
   }, []);
+
+  const fetchMyProfile = async () => {
+    try {
+      const res = await axios.get('/api/profile');
+      const data = res.data || {};
+      setProfileForm({
+        name: data.name || user?.name || '',
+        email: data.email || user?.email || '',
+        department: data.department || '',
+        phone: data.phone || data.contact || '',
+        bio: data.bio || '',
+        specialization: data.specialization || '',
+        expertiseTags: data.expertiseTags || '',
+        preferredReviewDay: data.preferredReviewDay || '',
+        preferredReviewTime: data.preferredReviewTime || '',
+        linkedinUrl: data.linkedinUrl || data.linkedin || '',
+        githubUrl: data.githubUrl || data.github || '',
+        portfolioUrl: data.portfolioUrl || '',
+      });
+    } catch (err) {
+      console.error('Failed to fetch internal guide profile', err);
+    }
+  };
+
+  const saveMyProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setProfileSaving(true);
+      setProfileFeedback({ type: '', message: '' });
+      const payload = {
+        name: profileForm.name,
+        department: profileForm.department,
+        phone: profileForm.phone,
+        bio: profileForm.bio,
+        specialization: profileForm.specialization,
+        expertiseTags: profileForm.expertiseTags,
+        preferredReviewDay: profileForm.preferredReviewDay,
+        preferredReviewTime: profileForm.preferredReviewTime,
+        linkedinUrl: profileForm.linkedinUrl,
+        githubUrl: profileForm.githubUrl,
+        portfolioUrl: profileForm.portfolioUrl,
+      };
+      const validationError = validateProfilePayload(payload);
+      if (validationError) {
+        setProfileFeedback({ type: 'error', message: validationError });
+        return;
+      }
+      await axios.put('/api/profile', payload);
+      setProfileFeedback({ type: 'success', message: 'Profile updated successfully.' });
+    } catch (err) {
+      setProfileFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to update profile.' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   useEffect(() => {
     fetchReviewSchedule(reviewDate);
@@ -356,6 +430,7 @@ const InternalGuideDashboard = () => {
 
   const tabs = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'my_profile', label: 'My Profile', icon: UserCircle2 },
     { key: 'weeklyReview', label: 'Weekly Review', icon: Calendar },
     { key: 'students', label: 'My Students', icon: Users },
     { key: 'logs', label: 'Weekly Logs', icon: BookOpen },
@@ -420,7 +495,11 @@ const InternalGuideDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-50">
-      <Navbar />
+      <Navbar
+        showProfileDropdown
+        profileName={profileForm.name || user?.name}
+        onProfileClick={() => setActiveTab('my_profile')}
+      />
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-72 bg-white/80 backdrop-blur border-r border-slate-200 min-h-[calc(100vh-64px)] p-5 shadow-sm">
@@ -565,6 +644,135 @@ const InternalGuideDashboard = () => {
                   <p className="text-slate-500">No students assigned yet</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'my_profile' && (
+            <div className="max-w-3xl bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Internal Guide Profile</h2>
+              <p className="text-sm text-slate-500 mb-6">Keep your profile updated for student coordination and notifications.</p>
+              <form onSubmit={saveMyProfile} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Name</label>
+                    <input
+                      type="text"
+                      value={profileForm.name}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Email</label>
+                    <input type="email" value={profileForm.email} disabled className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Department</label>
+                    <input
+                      type="text"
+                      value={profileForm.department}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, department: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Phone</label>
+                    <input
+                      type="text"
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Specialization</label>
+                    <input
+                      type="text"
+                      value={profileForm.specialization}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, specialization: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Expertise Tags</label>
+                    <input
+                      type="text"
+                      value={profileForm.expertiseTags}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, expertiseTags: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      placeholder="e.g. Software Engineering, Full Stack"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Preferred Review Day</label>
+                    <input
+                      type="text"
+                      value={profileForm.preferredReviewDay}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, preferredReviewDay: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      placeholder="e.g. Wednesday"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Preferred Review Time</label>
+                    <input
+                      type="text"
+                      value={profileForm.preferredReviewTime}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, preferredReviewTime: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      placeholder="e.g. 3:00 PM - 5:00 PM"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">LinkedIn URL</label>
+                    <input
+                      type="url"
+                      value={profileForm.linkedinUrl}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      placeholder="https://linkedin.com/in/..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">GitHub URL</label>
+                    <input
+                      type="url"
+                      value={profileForm.githubUrl}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, githubUrl: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      placeholder="https://github.com/..."
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Portfolio / Website</label>
+                    <input
+                      type="url"
+                      value={profileForm.portfolioUrl}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, portfolioUrl: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                      placeholder="https://your-website.com"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Bio</label>
+                  <textarea
+                    rows={4}
+                    value={profileForm.bio}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, bio: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                  />
+                </div>
+                {profileFeedback.message && (
+                  <div className={`rounded-lg px-3 py-2 text-sm font-medium ${profileFeedback.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                    {profileFeedback.message}
+                  </div>
+                )}
+                <button type="submit" disabled={profileSaving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                  {profileSaving ? 'Saving...' : 'Save Profile'}
+                </button>
+              </form>
             </div>
           )}
 

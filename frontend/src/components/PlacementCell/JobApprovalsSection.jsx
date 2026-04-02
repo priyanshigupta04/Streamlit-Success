@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import axios from '../../api/axios';
+import React from 'react';
 
 const JobApprovalsSection = ({ pendingJobs, loading, onApprove, onReject, onDataChange }) => {
   return (

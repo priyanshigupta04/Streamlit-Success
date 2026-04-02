@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from '../../api/axios';
 import { Search, RefreshCw, Trash2 } from 'lucide-react';
 
 const VALID_ROLES = ['student', 'recruiter', 'mentor', 'internal_guide', 'placement_cell', 'hod', 'dean'];

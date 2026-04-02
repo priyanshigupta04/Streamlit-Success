@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, Mail, Linkedin, GraduationCap, Zap, Settings, User } from 'lucide-react';
+import { Phone, Mail, Linkedin, GraduationCap, Zap, Settings } from 'lucide-react';
 
 const UserProfile = ({ profile, status, setShowModal }) => {
   return (
@@ -12,8 +12,9 @@ const UserProfile = ({ profile, status, setShowModal }) => {
             <div className="w-28 h-28 bg-slate-100 rounded-[2.2rem] shadow-xl border-4 border-white overflow-hidden flex items-center justify-center">
               {profile.image ? (
   <img
-  src={profile?.photo ? profile.photo : "/default-avatar.png"}
+  src={profile.image}
   alt="profile"
+  className="w-full h-full object-cover"
 />
 ) : (
   <span className="text-4xl font-black text-slate-300 italic">
@@ -60,7 +61,7 @@ const UserProfile = ({ profile, status, setShowModal }) => {
             </div>
             <div className="overflow-hidden">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">LinkedIn</p>
-              <p className="text-[11px] font-bold text-black truncate">{profile.linkedin?.replace('https://', '') || 'Not Linked'}</p>
+              <p className="text-[11px] font-bold text-black truncate">{(profile.linkedin || profile.linkedinUrl || '').replace('https://', '') || 'Not Linked'}</p>
             </div>
           </div>
         </div>

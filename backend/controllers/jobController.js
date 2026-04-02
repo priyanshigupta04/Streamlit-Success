@@ -2,8 +2,13 @@ const Job = require("../models/Job");
 const Notification = require("../models/Notification");
 const Application = require("../models/Application");
 const User = require("../models/User");
+const { getExpiryVisibilityFilter } = require('../services/jobLifecycleService');
 
-const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
+// Keep defaults reasonable, but allow production to increase via env for cold starts.
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
+const AI_PARSE_TIMEOUT_MS = Number(process.env.AI_PARSE_TIMEOUT_MS || 30000);
+const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
+const LOCAL_AI_SERVICE_URL = 'http://localhost:8000';
 
 const buildSenderMeta = (req) => ({
   sender: {
@@ -164,6 +169,40 @@ const getAxiosErrorMessage = (err) => {
   );
 };
 
+const getAiServiceCandidates = () => {
+  const list = [];
+  const configured = String(process.env.AI_SERVICE_URL || '').trim();
+  const configuredList = String(process.env.AI_SERVICE_URLS || '')
+    .split(',')
+    .map((u) => u.trim())
+    .filter(Boolean);
+
+  if (configured) list.push(configured);
+  if (configuredList.length) list.push(...configuredList);
+
+  // Keep a local fallback for development when deployed AI service is cold/unreachable.
+  list.push(LOCAL_AI_SERVICE_URL, DEFAULT_AI_SERVICE_URL);
+
+  return [...new Set(list.map((u) => u.replace(/\/+$/, '')))];
+};
+
+const postToAiWithFallback = async (path, payload, timeoutMs) => {
+  const axios = require('axios');
+  const urls = getAiServiceCandidates();
+  let lastError = null;
+
+  for (const baseUrl of urls) {
+    try {
+      const response = await axios.post(`${baseUrl}${path}`, payload, { timeout: timeoutMs });
+      return { data: response.data, baseUrl };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('AI service unavailable');
+};
+
 const estimateProfileCompleteness = (user) => {
   const checks = [
     !!(user.name && user.name.trim()),
@@ -190,6 +229,8 @@ exports.createJob = async (req, res) => {
             deadline, eligibility,
             companyAddress, companyCity, companyState, companyWebsite, companyTechDomain } = req.body;
 
+    const initialStatus = isExpiredDeadline(deadline) ? 'closed' : 'open';
+
     const job = await Job.create({
       title, company, type, domain, description,
       requiredSkills: requiredSkills || [],
@@ -197,7 +238,7 @@ exports.createJob = async (req, res) => {
       companyAddress, companyCity, companyState, companyWebsite, companyTechDomain,
       postedBy: req.user._id,
       jdText: description,
-      status: 'open',
+      status: initialStatus,
       approvalStatus: 'pending',
     });
 
@@ -233,6 +274,7 @@ exports.getJobs = async (req, res) => {
   try {
     const { status, type, domain, search } = req.query;
     const filter = {};
+    const andFilters = [];
     
     if (status) filter.status = status;
     if (type) filter.type = type;
@@ -240,11 +282,15 @@ exports.getJobs = async (req, res) => {
 
     // Build approval status filter
     if (!req.user || req.user.role !== 'placement_cell') {
-      // Students & others see: approved jobs OR (pending jobs that are still open)
-      filter.$or = [
-        { approvalStatus: 'approved' },
-        { approvalStatus: 'pending', status: 'open' }
-      ];
+      // Students & others see non-expired, open jobs with allowed approval states.
+      andFilters.push({
+        $or: [
+          { approvalStatus: 'approved' },
+          { approvalStatus: 'pending', status: 'open' }
+        ]
+      });
+      andFilters.push({ status: 'open' });
+      andFilters.push(getExpiryVisibilityFilter(new Date()));
     }
     // placement_cell sees all regardless of approval status
 
@@ -256,16 +302,11 @@ exports.getJobs = async (req, res) => {
         { description: { $regex: search, $options: 'i' } },
       ];
       
-      // Combine with existing $or if it exists
-      if (filter.$or) {
-        filter.$and = [
-          { $or: filter.$or },
-          { $or: searchFilter }
-        ];
-        delete filter.$or;
-      } else {
-        filter.$or = searchFilter;
-      }
+      andFilters.push({ $or: searchFilter });
+    }
+
+    if (andFilters.length > 0) {
+      filter.$and = andFilters;
     }
 
     const jobs = await Job.find(filter)
@@ -303,6 +344,10 @@ exports.updateJob = async (req, res) => {
       'companyAddress','companyCity','companyState','companyWebsite','companyTechDomain'];
     allowed.forEach(f => { if (req.body[f] !== undefined) job[f] = req.body[f]; });
     if (req.body.description) job.jdText = req.body.description;
+
+    if (isExpiredDeadline(job.deadline)) {
+      job.status = 'closed';
+    }
 
     await job.save();
     res.json({ job });
@@ -411,7 +456,14 @@ exports.getMyJobs = async (req, res) => {
 exports.getRecommendedJobs = async (req, res) => {
   try {
     // 1. Fetch available jobs
-    const jobs = await Job.find({ status: 'open', approvalStatus: 'approved' })
+    const jobs = await Job.find({
+      status: 'open',
+      $or: [
+        { approvalStatus: 'approved' },
+        { approvalStatus: 'pending', status: 'open' },
+      ],
+      ...getExpiryVisibilityFilter(new Date()),
+    })
       .populate('postedBy', 'name companyName')
       .sort({ createdAt: -1 });
 
@@ -443,12 +495,10 @@ exports.getRecommendedJobs = async (req, res) => {
     } else if (user.resumeUrl) {
       // Try rebuilding missing resumeText from already uploaded resume URL.
       try {
-        const axios = require('axios');
-        const fastApiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-        const parseResponse = await axios.post(
-          `${fastApiUrl}/parse-resume-url`,
+        const parseResponse = await postToAiWithFallback(
+          '/parse-resume-url',
           { resume_url: user.resumeUrl },
-          { timeout: AI_TIMEOUT_MS }
+          AI_PARSE_TIMEOUT_MS
         );
 
         const parsedFields = parseResponse.data?.fields || {};
@@ -494,14 +544,13 @@ exports.getRecommendedJobs = async (req, res) => {
     // 3. Call Python AI services (analysis + recommendation)
     const axios = require('axios');
     const flaskUrl = process.env.FLASK_API_URL || 'http://localhost:8001';
-    const fastApiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
     let analysis = null;
 
     try {
-      const analysisResponse = await axios.post(
-        `${fastApiUrl}/analyze`,
+      const analysisResponse = await postToAiWithFallback(
+        '/analyze',
         { resume_text: resumeText },
-        { timeout: AI_TIMEOUT_MS }
+        AI_TIMEOUT_MS
       );
       analysis = analysisResponse.data || null;
       aiMeta.serviceStatus.analysis = 'ok';
@@ -515,11 +564,15 @@ exports.getRecommendedJobs = async (req, res) => {
 
     // Preferred: FastAPI recommendation endpoint
     try {
-      const aiResponse = await axios.post(`${fastApiUrl}/recommend`, {
-        resume_text: resumeText,
-        jobs: jobsPayload,
-        profile_completeness: aiMeta.profileCompleteness,
-      }, { timeout: AI_TIMEOUT_MS });
+      const aiResponse = await postToAiWithFallback(
+        '/recommend',
+        {
+          resume_text: resumeText,
+          jobs: jobsPayload,
+          profile_completeness: aiMeta.profileCompleteness,
+        },
+        AI_TIMEOUT_MS
+      );
 
       rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
       if (rankedJobs.length > 0) {
@@ -620,4 +673,11 @@ exports.updateStudentApplications = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Server error" });
   }
+};
+
+const isExpiredDeadline = (deadlineValue) => {
+  if (!deadlineValue) return false;
+  const parsed = new Date(deadlineValue);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed < new Date();
 };

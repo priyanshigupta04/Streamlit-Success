@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
   department:      String,
   year:            Number,
   semester:        Number,
+  semesterStartDate: Date,
   cgpa:            String,
   skills:          { type: mongoose.Schema.Types.Mixed, default: '' },
   resumeUrl:       String,
@@ -28,6 +29,15 @@ const userSchema = new mongoose.Schema({
   resumeText:      String,
   internshipReason: String,
   profileComplete: { type: Boolean, default: false },
+  universityName:   String,
+  designation:      String,
+  officeLocation:   String,
+  officeContact:    String,
+  supportEmail:     String,
+  expertiseTags:    String,
+  officeHours:      String,
+  preferredReviewDay: String,
+  preferredReviewTime: String,
 
   // Academic
   admissionYear:   String,

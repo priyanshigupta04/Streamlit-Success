@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from '../api/axios';
 import { Bell, X, CheckCheck, Trash2 } from 'lucide-react';
 
-const NotificationBell = ({ externalToggleSignal = 0, hideTrigger = false }) => {
+const NotificationBell = ({ externalToggleSignal = 0, hideTrigger = false, onUnreadCountChange }) => {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -53,6 +53,12 @@ const NotificationBell = ({ externalToggleSignal = 0, hideTrigger = false }) => 
       fetchNotifications();
     }
   }, [externalToggleSignal, fetchNotifications]);
+
+  useEffect(() => {
+    if (typeof onUnreadCountChange === 'function') {
+      onUnreadCountChange(unreadCount);
+    }
+  }, [unreadCount, onUnreadCountChange]);
 
   const markAsRead = async (id) => {
     try {

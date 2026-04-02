@@ -16,10 +16,37 @@ from typing import List, Optional, Dict
 # Add parent dir to path so imports work
 sys.path.insert(0, os.path.dirname(__file__))
 
-from skill_extractor import extract_skills, extract_skills_with_domains
-from domain_model import predict_domain, predict_domain_vector
-from scorer import rank_jobs_for_student
-from resume_parser import parse_resume_fields
+# Lazy-loaded AI functions to keep server startup fast on constrained hosts.
+extract_skills = None
+extract_skills_with_domains = None
+predict_domain = None
+predict_domain_vector = None
+rank_jobs_for_student = None
+parse_resume_fields = None
+
+
+def _load_ai_dependencies():
+    global extract_skills
+    global extract_skills_with_domains
+    global predict_domain
+    global predict_domain_vector
+    global rank_jobs_for_student
+    global parse_resume_fields
+
+    if extract_skills is None:
+        from skill_extractor import extract_skills as _extract_skills
+        from skill_extractor import extract_skills_with_domains as _extract_skills_with_domains
+        from domain_model import predict_domain as _predict_domain
+        from domain_model import predict_domain_vector as _predict_domain_vector
+        from scorer import rank_jobs_for_student as _rank_jobs_for_student
+        from resume_parser import parse_resume_fields as _parse_resume_fields
+
+        extract_skills = _extract_skills
+        extract_skills_with_domains = _extract_skills_with_domains
+        predict_domain = _predict_domain
+        predict_domain_vector = _predict_domain_vector
+        rank_jobs_for_student = _rank_jobs_for_student
+        parse_resume_fields = _parse_resume_fields
 
 app = FastAPI(title="SkillSync AI Engine", version="1.0.0")
 
@@ -77,6 +104,7 @@ def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail="Resume text too short")
 
     try:
+        _load_ai_dependencies()
         # Domain prediction with vector
         domain, confidence, domain_scores = predict_domain(req.resume_text)
         domain_vector = predict_domain_vector(req.resume_text)
@@ -117,6 +145,7 @@ def recommend(req: RecommendRequest):
         raise HTTPException(status_code=400, detail="No jobs provided")
 
     try:
+        _load_ai_dependencies()
         rankings = rank_jobs_for_student(
             req.resume_text,
             req.jobs,
@@ -141,6 +170,7 @@ def skills(req: SkillsRequest):
         raise HTTPException(status_code=400, detail="Text is required")
 
     try:
+        _load_ai_dependencies()
         flat_skills = extract_skills(req.text)
         grouped = extract_skills_with_domains(req.text)
         return {"skills": flat_skills, "byDomain": grouped}
@@ -166,6 +196,7 @@ def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
 
 def _run_ai_analysis(text: str) -> dict:
     try:
+        _load_ai_dependencies()
         skills_flat   = extract_skills(text)
         skills_by_dom = extract_skills_with_domains(text)
         domain, confidence, domain_scores = predict_domain(text)
@@ -213,6 +244,7 @@ def parse_resume_url(req: ParseResumeUrlRequest):
         raise HTTPException(status_code=422, detail="Extracted text too short — PDF may be scanned/image-only")
 
     # 3. Parse structured fields
+    _load_ai_dependencies()
     fields = parse_resume_fields(text)
 
     # 4. AI analysis
@@ -243,6 +275,7 @@ async def parse_resume_file(file: UploadFile = File(...)):
     if len(text.strip()) < 20:
         raise HTTPException(status_code=422, detail="Extracted text too short — PDF may be scanned/image-only")
 
+    _load_ai_dependencies()
     fields = parse_resume_fields(text)
     analysis = _run_ai_analysis(text)
     fields["skills"] = analysis.get("skills", [])
@@ -252,6 +285,7 @@ async def parse_resume_file(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("AI_PORT", 8000))
+    # Render requires web services to bind to PORT.
+    port = int(os.environ.get("PORT", os.environ.get("AI_PORT", 8000)))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 const MentorDashboard = () => {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
