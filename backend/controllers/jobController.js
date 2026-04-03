@@ -471,14 +471,6 @@ exports.getMyJobs = async (req, res) => {
 // GET /api/jobs/recommended — student personalized jobs
 exports.getRecommendedJobs = async (req, res) => {
   try {
-    const requestStartedAt = Date.now();
-    const AI_TOTAL_BUDGET_MS = Math.max(Number(process.env.AI_RECOMMENDATION_BUDGET_MS || 20000), 8000);
-    const ENABLE_RECOMMENDATION_ANALYSIS = String(process.env.AI_RECOMMENDATION_INCLUDE_ANALYSIS || 'false').toLowerCase() === 'true';
-    const getRemainingBudget = () => AI_TOTAL_BUDGET_MS - (Date.now() - requestStartedAt);
-    const hasBudget = (minimumMs = 2500) => getRemainingBudget() >= minimumMs;
-    const getStepTimeout = () => Math.max(2500, Math.min(AI_TIMEOUT_MS, getRemainingBudget()));
-    const aiServiceCandidates = getAiServiceCandidates();
-
     // 1. Fetch available jobs
     const jobs = await Job.find(buildStudentVisibleJobFilter(new Date()))
       .populate('postedBy', 'name companyName')
@@ -491,7 +483,7 @@ exports.getRecommendedJobs = async (req, res) => {
     // 2. Format jobs and resume text for the Flask API
     const user = req.user;
     const aiMeta = {
-      serviceStatus: { recommendation: 'not_called', analysis: 'not_called' },
+      serviceStatus: { recommendation: 'not_called', analysis: 'skipped' },
       warnings: [],
       resumeSource: 'profile',
       jobsConsidered: jobs.length,
@@ -510,34 +502,7 @@ exports.getRecommendedJobs = async (req, res) => {
     if (resumeText.length >= 20) {
       aiMeta.resumeSource = 'resumeText';
     } else if (user.resumeUrl) {
-      // Try rebuilding missing resumeText from already uploaded resume URL.
-      if (!hasBudget(3000)) {
-        aiMeta.warnings.push('Skipping resume URL parsing due to response-time budget.');
-      } else {
-        try {
-          const parseResponse = await postToAiWithFallback({
-            path: '/parse-resume-url',
-            payload: { resume_url: user.resumeUrl },
-            timeoutMs: getStepTimeout(),
-            candidates: aiServiceCandidates,
-          });
-
-          const parsedFields = parseResponse.data?.fields || {};
-          const parsedText = String(parsedFields.resumeText || '').trim();
-
-          if (parsedText.length >= 20) {
-            resumeText = parsedText;
-            aiMeta.resumeSource = 'resumeUrlParsed';
-
-            // Persist only raw resume text for AI usage; keep profile fields manual/user-controlled.
-            await User.findByIdAndUpdate(user._id, { resumeText: parsedText }, { new: false });
-          } else {
-            aiMeta.warnings.push('Resume URL parse returned insufficient text, using profile fallback.');
-          }
-        } catch (parseErr) {
-          aiMeta.warnings.push(`Resume re-parse failed: ${getAxiosErrorMessage(parseErr)}`);
-        }
-      }
+      aiMeta.resumeSource = 'resumeUrlLinked';
     }
 
     if (!resumeText || resumeText.length < 20) {
@@ -546,108 +511,14 @@ exports.getRecommendedJobs = async (req, res) => {
     }
 
     if (!resumeText || resumeText.length < 20) {
-      aiMeta.usedFallbackRanking = true;
-      aiMeta.serviceStatus.recommendation = 'fallback';
-      aiMeta.warnings.push('Insufficient profile context for AI ranking. Showing profile-skill fallback ranking.');
-      const heuristicRanked = rankJobsHeuristically(jobs, normalizeSkillList(user.skills));
-      return res.json({ jobs: heuristicRanked, ai: { analysis: null, meta: aiMeta } });
+      resumeText = user.name || user.email || 'student';
     }
-
-    // Format jobs to strip Mongoose objects
-    const jobsPayload = jobs.map(j => ({
-      _id: j._id.toString(),
-      title: j.title,
-      company: j.company,
-      domain: j.domain,
-      requiredSkills: j.requiredSkills || [],
-      jdText: j.description || '',
-    }));
-
-    // 3. Call Python AI services (analysis + recommendation)
-    const flaskUrl = process.env.FLASK_API_URL || 'http://localhost:8001';
-    let analysis = null;
-
-    if (ENABLE_RECOMMENDATION_ANALYSIS) {
-      if (hasBudget(3000)) {
-        try {
-          const analysisResponse = await postToAiWithFallback({
-            path: '/analyze',
-            payload: { resume_text: resumeText },
-            timeoutMs: getStepTimeout(),
-            candidates: aiServiceCandidates,
-          });
-          analysis = analysisResponse.data || null;
-          aiMeta.serviceStatus.analysis = 'ok';
-        } catch (analysisError) {
-          aiMeta.serviceStatus.analysis = 'failed';
-          aiMeta.warnings.push(`Profile analysis unavailable: ${analysisError.message}`);
-        }
-      } else {
-        aiMeta.serviceStatus.analysis = 'failed';
-        aiMeta.warnings.push('Skipping profile analysis due to response-time budget.');
-      }
-    } else {
-      aiMeta.serviceStatus.analysis = 'skipped';
-    }
-    
-    let rankingError = null;
-    let rankedJobs = [];
-
-    // Preferred: FastAPI recommendation endpoint
-    if (hasBudget(3000)) {
-      try {
-        const aiResponse = await postToAiWithFallback({
-          path: '/recommend',
-          payload: {
-            resume_text: resumeText,
-            jobs: jobsPayload,
-            profile_completeness: aiMeta.profileCompleteness,
-          },
-          timeoutMs: getStepTimeout(),
-          candidates: aiServiceCandidates,
-        });
-
-        rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
-        if (rankedJobs.length > 0) {
-          aiMeta.serviceStatus.recommendation = 'ok';
-          return res.json({ jobs: rankedJobs, ai: { analysis, meta: aiMeta } });
-        }
-      } catch (fastApiRecommendError) {
-        rankingError = fastApiRecommendError;
-      }
-    } else {
-      aiMeta.warnings.push('Skipping AI recommendation due to response-time budget.');
-    }
-
-    // Secondary: legacy Flask endpoint
-    if (hasBudget(2500)) {
-      try {
-        const aiResponse = await axios.post(`${flaskUrl}/recommend-jobs`, {
-          resume_text: resumeText,
-          jobs: jobsPayload,
-          profile_completeness: aiMeta.profileCompleteness,
-        }, { timeout: getStepTimeout() });
-
-        rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
-        if (rankedJobs.length > 0) {
-          aiMeta.serviceStatus.recommendation = 'ok';
-          aiMeta.warnings.push('Using legacy ranking service fallback.');
-          return res.json({ jobs: rankedJobs, ai: { analysis, meta: aiMeta } });
-        }
-      } catch (flaskRecommendError) {
-        rankingError = rankingError || flaskRecommendError;
-      }
-    } else {
-      aiMeta.warnings.push('Skipping legacy ranking fallback due to response-time budget.');
-    }
-
-    // Final: deterministic local ranking
-    aiMeta.serviceStatus.recommendation = 'fallback';
-    aiMeta.usedFallbackRanking = true;
-    aiMeta.warnings.push(`AI recommendation unavailable: ${getAxiosErrorMessage(rankingError)}`);
-    aiMeta.warnings.push('Showing profile-skill-based fallback ranking.');
+    // Local ranking engine: always return a deterministic recommendation list.
     const heuristicRanked = rankJobsHeuristically(jobs, normalizeSkillList(user.skills));
-    return res.json({ jobs: heuristicRanked, ai: { analysis, meta: aiMeta } });
+    aiMeta.usedFallbackRanking = true;
+    aiMeta.serviceStatus.recommendation = 'ok';
+    aiMeta.warnings.push('Using local profile-skill ranking engine.');
+    return res.json({ jobs: heuristicRanked, ai: { analysis: null, meta: aiMeta } });
 
   } catch (err) {
     res.status(500).json({ message: err.message });
