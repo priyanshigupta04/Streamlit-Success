@@ -1022,16 +1022,16 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Verified Roles</p>
             </div>
             <div className="flex items-center gap-3">
-              {(aiMeta || aiAnalysis) && (
-                <button
-                  type="button"
-                  onClick={() => setShowAiDrawer(true)}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-black hover:text-black transition-all"
-                >
-                  <Zap size={14} />
-                  AI Insights
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowAiDrawer(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-black hover:text-black transition-all"
+                aria-label="Open AI insights"
+              >
+                <Zap size={14} />
+                <span className="hidden sm:inline">AI Insights</span>
+                <span className="sm:hidden">AI</span>
+              </button>
               <Filter size={20} className="text-slate-300" />
             </div>
           </div>
