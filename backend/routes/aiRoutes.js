@@ -5,7 +5,7 @@ const protect = require("../middleware/authMiddleware");
 
 const DEFAULT_AI_SERVICE_URL = "https://streamlit-success-ai.onrender.com";
 const AI_BASE = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
-const AI_HEALTH_TIMEOUT_MS = Number(process.env.AI_HEALTH_TIMEOUT_MS || 20000);
+const AI_HEALTH_TIMEOUT_MS = Math.min(Number(process.env.AI_HEALTH_TIMEOUT_MS || 20000), 5000);
 
 // POST /api/ai/analyze — proxy resume analysis to Python FastAPI
 router.post("/analyze", protect, async (req, res) => {

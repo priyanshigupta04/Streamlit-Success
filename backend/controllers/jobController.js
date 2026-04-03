@@ -4,7 +4,7 @@ const Application = require("../models/Application");
 const User = require("../models/User");
 const { getExpiryVisibilityFilter } = require('../services/jobLifecycleService');
 
-const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
+const AI_TIMEOUT_MS = Math.min(Number(process.env.AI_TIMEOUT_MS || 120000), 10000);
 const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
 
 const buildSenderMeta = (req) => ({

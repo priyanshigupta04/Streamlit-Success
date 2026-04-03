@@ -272,8 +272,7 @@ const StudentDashboard = () => {
         aiRetryTimerRef.current = null;
       }
 
-      const res = await axios.get('/api/jobs/recommended');
-      const mapped = (res.data.jobs || []).map(j => ({
+      const mapJobs = (items) => (items || []).map(j => ({
         id: j._id,
         company: j.company,
         role: j.title,
@@ -285,7 +284,7 @@ const StudentDashboard = () => {
         raw: j,
       }));
 
-      mapped.sort((a, b) => {
+      const sortJobs = (items) => items.sort((a, b) => {
         const aScore = a.matchData?.overallScore;
         const bScore = b.matchData?.overallScore;
         if (typeof aScore === 'number' && typeof bScore === 'number') return bScore - aScore;
@@ -293,6 +292,9 @@ const StudentDashboard = () => {
         if (typeof aScore === 'number') return -1;
         return 0;
       });
+
+      const res = await axios.get('/api/jobs/recommended', { timeout: 8000 });
+      const mapped = sortJobs(mapJobs(res.data.jobs || []));
 
       setJobs(mapped);
       if (res.data.ai?.analysis) {
@@ -315,6 +317,13 @@ const StudentDashboard = () => {
       }
     } catch (err) {
       console.error('Failed to load recommended jobs', err);
+      try {
+        const fallbackRes = await axios.get('/api/jobs', { timeout: 8000 });
+        const fallbackJobs = sortJobs(mapJobs(fallbackRes.data.jobs || []));
+        setJobs(fallbackJobs);
+      } catch (fallbackErr) {
+        console.error('Failed to load fallback jobs', fallbackErr);
+      }
       if (retryAttempt < 3) {
         const delayMs = 4000 * (retryAttempt + 1);
         aiRetryTimerRef.current = setTimeout(() => {
