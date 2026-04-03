@@ -4,8 +4,11 @@ const Application = require("../models/Application");
 const User = require("../models/User");
 const { getExpiryVisibilityFilter } = require('../services/jobLifecycleService');
 
-const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000);
+// Keep defaults reasonable, but allow production to increase via env for cold starts.
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
+const AI_PARSE_TIMEOUT_MS = Number(process.env.AI_PARSE_TIMEOUT_MS || 30000);
 const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
+const LOCAL_AI_SERVICE_URL = 'http://localhost:8000';
 
 const buildSenderMeta = (req) => ({
   sender: {
@@ -164,6 +167,40 @@ const getAxiosErrorMessage = (err) => {
     err?.message ||
     'service unavailable'
   );
+};
+
+const getAiServiceCandidates = () => {
+  const list = [];
+  const configured = String(process.env.AI_SERVICE_URL || '').trim();
+  const configuredList = String(process.env.AI_SERVICE_URLS || '')
+    .split(',')
+    .map((u) => u.trim())
+    .filter(Boolean);
+
+  if (configured) list.push(configured);
+  if (configuredList.length) list.push(...configuredList);
+
+  // Keep a local fallback for development when deployed AI service is cold/unreachable.
+  list.push(LOCAL_AI_SERVICE_URL, DEFAULT_AI_SERVICE_URL);
+
+  return [...new Set(list.map((u) => u.replace(/\/+$/, '')))];
+};
+
+const postToAiWithFallback = async (path, payload, timeoutMs) => {
+  const axios = require('axios');
+  const urls = getAiServiceCandidates();
+  let lastError = null;
+
+  for (const baseUrl of urls) {
+    try {
+      const response = await axios.post(`${baseUrl}${path}`, payload, { timeout: timeoutMs });
+      return { data: response.data, baseUrl };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('AI service unavailable');
 };
 
 const estimateProfileCompleteness = (user) => {
@@ -458,12 +495,10 @@ exports.getRecommendedJobs = async (req, res) => {
     } else if (user.resumeUrl) {
       // Try rebuilding missing resumeText from already uploaded resume URL.
       try {
-        const axios = require('axios');
-        const fastApiUrl = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
-        const parseResponse = await axios.post(
-          `${fastApiUrl}/parse-resume-url`,
+        const parseResponse = await postToAiWithFallback(
+          '/parse-resume-url',
           { resume_url: user.resumeUrl },
-          { timeout: AI_TIMEOUT_MS }
+          AI_PARSE_TIMEOUT_MS
         );
 
         const parsedFields = parseResponse.data?.fields || {};
@@ -509,14 +544,13 @@ exports.getRecommendedJobs = async (req, res) => {
     // 3. Call Python AI services (analysis + recommendation)
     const axios = require('axios');
     const flaskUrl = process.env.FLASK_API_URL || 'http://localhost:8001';
-    const fastApiUrl = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
     let analysis = null;
 
     try {
-      const analysisResponse = await axios.post(
-        `${fastApiUrl}/analyze`,
+      const analysisResponse = await postToAiWithFallback(
+        '/analyze',
         { resume_text: resumeText },
-        { timeout: AI_TIMEOUT_MS }
+        AI_TIMEOUT_MS
       );
       analysis = analysisResponse.data || null;
       aiMeta.serviceStatus.analysis = 'ok';
@@ -530,11 +564,15 @@ exports.getRecommendedJobs = async (req, res) => {
 
     // Preferred: FastAPI recommendation endpoint
     try {
-      const aiResponse = await axios.post(`${fastApiUrl}/recommend`, {
-        resume_text: resumeText,
-        jobs: jobsPayload,
-        profile_completeness: aiMeta.profileCompleteness,
-      }, { timeout: AI_TIMEOUT_MS });
+      const aiResponse = await postToAiWithFallback(
+        '/recommend',
+        {
+          resume_text: resumeText,
+          jobs: jobsPayload,
+          profile_completeness: aiMeta.profileCompleteness,
+        },
+        AI_TIMEOUT_MS
+      );
 
       rankedJobs = mapRankingsToJobs(jobs, aiResponse.data.rankings || []);
       if (rankedJobs.length > 0) {
