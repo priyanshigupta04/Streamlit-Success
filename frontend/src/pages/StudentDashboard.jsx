@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 const StudentDashboard = () => {
-  const RECOMMENDED_JOBS_TIMEOUT_MS = Number(process.env.REACT_APP_RECOMMENDED_JOBS_TIMEOUT_MS || 30000);
+  const RECOMMENDED_JOBS_TIMEOUT_MS = Number(process.env.REACT_APP_RECOMMENDED_JOBS_TIMEOUT_MS || 90000);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const aiRetryTimerRef = useRef(null);
