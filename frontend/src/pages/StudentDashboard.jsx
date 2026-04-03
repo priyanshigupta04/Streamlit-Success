@@ -140,6 +140,7 @@ const StudentDashboard = () => {
     offerLetterName: '',
     offerLetterUrl: '',
     internshipReason: '',
+    resumeText: '',
     image: null,
   certificates: [{ org: '', file: null }],
   });
@@ -233,6 +234,7 @@ const StudentDashboard = () => {
     skills: Array.isArray(data.skills) ? data.skills.join(', ') : (data.skills || ''),
     resumeName: data.resumeName || '',
     resumeUrl: data.resumeUrl || '',
+    resumeText: data.resumeText || '',
     offerLetterName: data.offerLetterName || '',
     offerLetterUrl: data.offerLetterUrl || '',
     internshipReason: data.internshipReason || '',
@@ -288,26 +290,140 @@ const StudentDashboard = () => {
       return 0;
     });
 
+    const buildResumeTextForAi = (nextProfile) => {
+      if (nextProfile?.resumeText && String(nextProfile.resumeText).trim().length >= 20) {
+        return String(nextProfile.resumeText).trim();
+      }
+
+      const sections = [
+        `Name: ${nextProfile?.fullName || ''}`,
+        `Email: ${nextProfile?.email || ''}`,
+        `Department: ${nextProfile?.department || ''}`,
+        `Branch: ${nextProfile?.branch || ''}`,
+        `Specialization: ${nextProfile?.specialization || ''}`,
+        `Semester: ${nextProfile?.semester || ''}`,
+        `CGPA: ${nextProfile?.cgpa || ''}`,
+        `Skills: ${nextProfile?.skills || ''}`,
+        `Projects: ${nextProfile?.projects || ''}`,
+        `Bio: ${nextProfile?.internshipReason || ''}`,
+      ];
+
+      return sections.filter(Boolean).join('. ');
+    };
+
     try {
       if (aiRetryTimerRef.current) {
         clearTimeout(aiRetryTimerRef.current);
         aiRetryTimerRef.current = null;
       }
 
-      const res = await axios.get('/api/jobs/recommended', { timeout: RECOMMENDED_JOBS_TIMEOUT_MS });
-      const mapped = sortJobs(mapJobs(res.data.jobs || []));
+      const jobsRes = await axios.get('/api/jobs', { timeout: RECOMMENDED_JOBS_TIMEOUT_MS });
+      const rawJobs = jobsRes.data.jobs || [];
+      const mappedFallback = sortJobs(mapJobs(rawJobs));
 
-      setJobs(mapped);
-      if (res.data.ai?.analysis) {
-        setAiAnalysis(res.data.ai.analysis);
+      const resumeTextForAi = buildResumeTextForAi(profile);
+      const canUseAi = String(resumeTextForAi || '').trim().length >= 20 && rawJobs.length > 0;
+
+      if (!canUseAi) {
+        setJobs(mappedFallback);
+        setAiAnalysis(null);
+        setAiMeta({
+          serviceStatus: { analysis: 'skipped', recommendation: 'fallback' },
+          warnings: ['Using local ranking because AI profile text is unavailable.'],
+          resumeSource: 'profileSynthesized',
+          jobsConsidered: rawJobs.length,
+          profileCompleteness: estimateProfileCompleteness(profile),
+          usedFallbackRanking: true,
+          profileSnapshot: {
+            branch: profile.branch || '',
+            specialization: profile.specialization || '',
+            semester: profile.semester || null,
+            cgpa: profile.cgpa || '',
+            skillCount: String(profile.skills || '').split(',').map((s) => s.trim()).filter(Boolean).length,
+          },
+        });
+        return;
       }
-      const nextMeta = res.data.ai?.meta || null;
+
+      const [analysisResult, recommendationResult] = await Promise.allSettled([
+        axios.post('/api/ai/analyze', { resumeText: resumeTextForAi }, { timeout: RECOMMENDED_JOBS_TIMEOUT_MS }),
+        axios.post('/api/ai/recommend', {
+          resumeText: resumeTextForAi,
+          jobs: rawJobs,
+        }, { timeout: RECOMMENDED_JOBS_TIMEOUT_MS }),
+      ]);
+
+      const aiWarnings = [];
+      let nextAnalysis = null;
+      let nextMeta = {
+        serviceStatus: { analysis: 'skipped', recommendation: 'fallback' },
+        warnings: aiWarnings,
+        resumeSource: profile.resumeText ? 'resumeText' : 'profileSynthesized',
+        jobsConsidered: rawJobs.length,
+        profileCompleteness: estimateProfileCompleteness(profile),
+        usedFallbackRanking: false,
+        profileSnapshot: {
+          branch: profile.branch || '',
+          specialization: profile.specialization || '',
+          semester: profile.semester || null,
+          cgpa: profile.cgpa || '',
+          skillCount: String(profile.skills || '').split(',').map((s) => s.trim()).filter(Boolean).length,
+        },
+      };
+
+      if (analysisResult.status === 'fulfilled') {
+        nextAnalysis = analysisResult.value.data || null;
+        nextMeta.serviceStatus.analysis = 'ok';
+      } else {
+        nextMeta.serviceStatus.analysis = 'failed';
+        aiWarnings.push(`Profile analysis unavailable: ${analysisResult.reason?.message || 'request failed'}`);
+      }
+
+      if (recommendationResult.status === 'fulfilled' && Array.isArray(recommendationResult.value.data?.rankings)) {
+        const rankedJobs = mapJobs(rawJobs).map((job) => {
+          const rank = recommendationResult.value.data.rankings.find((item) => String(item.jobId) === String(job.id));
+          return rank
+            ? { ...job, matchData: {
+                overallScore: rank.overallScore,
+                semantic: rank.semantic,
+                skillOverlap: rank.skillOverlap,
+                domainMatch: rank.domainMatch,
+                matchedSkills: rank.matchedSkills || [],
+                missingSkills: rank.missingSkills || [],
+              } }
+            : job;
+        }).sort((a, b) => {
+          const aScore = a.matchData?.overallScore;
+          const bScore = b.matchData?.overallScore;
+          if (typeof aScore === 'number' && typeof bScore === 'number') return bScore - aScore;
+          if (typeof bScore === 'number') return 1;
+          if (typeof aScore === 'number') return -1;
+          return 0;
+        });
+
+        setJobs(rankedJobs);
+        nextMeta.serviceStatus.recommendation = 'ok';
+        nextMeta.warnings = aiWarnings;
+        nextMeta.usedFallbackRanking = false;
+        setAiAnalysis(nextAnalysis);
+        setAiMeta(nextMeta);
+        return;
+      }
+
+      if (recommendationResult.status !== 'fulfilled') {
+        aiWarnings.push(`AI recommendation unavailable: ${recommendationResult.reason?.message || 'request failed'}`);
+      }
+
+      nextMeta.serviceStatus.recommendation = 'fallback';
+      nextMeta.usedFallbackRanking = true;
+      aiWarnings.push('Showing profile-skill-based fallback ranking.');
+      setJobs(mappedFallback);
+      setAiAnalysis(nextAnalysis);
       setAiMeta(nextMeta);
 
       const recommendationStatus = nextMeta?.serviceStatus?.recommendation;
-      const warnings = nextMeta?.warnings || [];
-      const transientAiFailure = warnings.some((w) =>
-        /(service unavailable|timeout|timed out|ECONNREFUSED|ETIMEDOUT|502)/i.test(String(w || ''))
+      const transientAiFailure = aiWarnings.some((w) =>
+        /(service unavailable|timeout|timed out|ECONNREFUSED|ETIMEDOUT|502|503|504)/i.test(String(w || ''))
       );
 
       if (recommendationStatus === 'fallback' && transientAiFailure && retryAttempt < 3) {
@@ -318,22 +434,16 @@ const StudentDashboard = () => {
       }
     } catch (err) {
       console.error('Failed to load recommended jobs', err);
-      const statusCode = err?.response?.status;
-      const errorCode = String(err?.code || '');
-      const message = String(err?.message || '');
-      const isTransientError =
-        statusCode >= 500 ||
-        ['ECONNABORTED', 'ECONNRESET', 'ETIMEDOUT', 'ERR_NETWORK'].includes(errorCode) ||
-        /(timeout|timed out|network error|failed to fetch|502|503|504)/i.test(message);
-
       try {
-        const fallbackRes = await axios.get('/api/jobs', { timeout: 8000 });
+        const fallbackRes = await axios.get('/api/jobs/recommended', { timeout: 8000 });
         const fallbackJobs = sortJobs(mapJobs(fallbackRes.data.jobs || []));
         setJobs(fallbackJobs);
+        setAiAnalysis(fallbackRes.data.ai?.analysis || null);
+        setAiMeta(fallbackRes.data.ai?.meta || null);
       } catch (fallbackErr) {
         console.error('Failed to load fallback jobs', fallbackErr);
       }
-      if (isTransientError && retryAttempt < 3) {
+      if (retryAttempt < 3) {
         const delayMs = 4000 * (retryAttempt + 1);
         aiRetryTimerRef.current = setTimeout(() => {
           fetchJobs(retryAttempt + 1);
