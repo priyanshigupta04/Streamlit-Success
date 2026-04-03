@@ -984,6 +984,25 @@ const normalizeAiStatusLabel = (status, type) => {
   return val;
 };
 
+  const estimateProfileCompleteness = (nextProfile) => {
+    const checks = [
+      !!(nextProfile?.fullName && String(nextProfile.fullName).trim()),
+      !!(nextProfile?.email && String(nextProfile.email).trim()),
+      !!(nextProfile?.branch && String(nextProfile.branch).trim()),
+      !!(nextProfile?.cgpa && String(nextProfile.cgpa).trim()),
+      !!(nextProfile?.skills && String(nextProfile.skills).trim()),
+      !!(nextProfile?.resumeName || nextProfile?.resumeUrl),
+      !!(nextProfile?.linkedin && String(nextProfile.linkedin).trim()),
+      !!(nextProfile?.github && String(nextProfile.github).trim()),
+    ];
+
+    return Math.min(100, Math.max(10, Math.round((checks.filter(Boolean).length / checks.length) * 100)));
+  };
+
+  const aiResumeSourceLabel = aiMeta?.resumeSource || (profile.resumeName || profile.resumeUrl ? 'profile' : 'unknown');
+  const aiProfileCompleteness = aiMeta?.profileCompleteness ?? estimateProfileCompleteness(profile);
+  const aiPredictedDomain = aiAnalysis?.domain || aiMeta?.profileSnapshot?.branch || profile.specialization || 'Not available';
+
 const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
   const text = String(w || '').trim();
   if (!text) return false;
@@ -1529,15 +1548,15 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
             <p className="text-[9px] font-black uppercase text-slate-400">Resume Source</p>
-            <p className="text-sm font-bold mt-1">{aiMeta?.resumeSource || 'unknown'}</p>
+            <p className="text-sm font-bold mt-1">{aiResumeSourceLabel}</p>
           </div>
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
             <p className="text-[9px] font-black uppercase text-slate-400">Profile Completeness</p>
-            <p className="text-sm font-bold mt-1">{aiMeta?.profileCompleteness ?? 'N/A'}%</p>
+            <p className="text-sm font-bold mt-1">{aiProfileCompleteness}%</p>
           </div>
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
             <p className="text-[9px] font-black uppercase text-slate-400">Predicted Domain</p>
-            <p className="text-sm font-bold mt-1">{aiAnalysis?.domain || 'Not available'}</p>
+            <p className="text-sm font-bold mt-1">{aiPredictedDomain}</p>
           </div>
         </div>
 
