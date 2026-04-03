@@ -184,6 +184,27 @@ const estimateProfileCompleteness = (user) => {
   return Math.min(100, Math.max(10, score));
 };
 
+const buildStudentVisibleJobFilter = (now = new Date()) => ({
+  $and: [
+    {
+      $or: [
+        { status: 'open' },
+        { status: { $exists: false } },
+        { status: null },
+      ],
+    },
+    {
+      $or: [
+        { approvalStatus: 'approved' },
+        { approvalStatus: 'pending' },
+        { approvalStatus: { $exists: false } },
+        { approvalStatus: null },
+      ],
+    },
+    getExpiryVisibilityFilter(now),
+  ],
+});
+
 // POST /api/jobs — recruiter creates a job
 exports.createJob = async (req, res) => {
   try {
@@ -243,17 +264,10 @@ exports.getJobs = async (req, res) => {
     if (type) filter.type = type;
     if (domain) filter.domain = domain;
 
-    // Build approval status filter
+    // Build student visibility filter
     if (!req.user || req.user.role !== 'placement_cell') {
-      // Students & others see non-expired, open jobs with allowed approval states.
-      andFilters.push({
-        $or: [
-          { approvalStatus: 'approved' },
-          { approvalStatus: 'pending', status: 'open' }
-        ]
-      });
-      andFilters.push({ status: 'open' });
-      andFilters.push(getExpiryVisibilityFilter(new Date()));
+      // Students & others see currently available jobs, including legacy records with missing status fields.
+      andFilters.push(buildStudentVisibleJobFilter(new Date()));
     }
     // placement_cell sees all regardless of approval status
 
@@ -419,14 +433,7 @@ exports.getMyJobs = async (req, res) => {
 exports.getRecommendedJobs = async (req, res) => {
   try {
     // 1. Fetch available jobs
-    const jobs = await Job.find({
-      status: 'open',
-      $or: [
-        { approvalStatus: 'approved' },
-        { approvalStatus: 'pending', status: 'open' },
-      ],
-      ...getExpiryVisibilityFilter(new Date()),
-    })
+    const jobs = await Job.find(buildStudentVisibleJobFilter(new Date()))
       .populate('postedBy', 'name companyName')
       .sort({ createdAt: -1 });
 
