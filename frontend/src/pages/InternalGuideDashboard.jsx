@@ -410,6 +410,10 @@ const InternalGuideDashboard = () => {
   const handleReviewLog = async (logId, status) => {
     try {
       const comment = reviewComments[logId] || '';
+      if (status === 'needs_revision' && !comment.trim()) {
+        alert('Please add feedback before requesting a revision');
+        return;
+      }
       await axios.put(`/api/logs/${logId}/review`, {
         status,
         guideComment: comment,
@@ -475,7 +479,7 @@ const InternalGuideDashboard = () => {
     })
     .filter((s) => !s.latestLog || s.daysSinceLastLog > 7);
 
-  const pendingLogs = allGuideLogs.filter((l) => ['submitted', 'under_review'].includes(l.status));
+  const pendingLogs = allGuideLogs.filter((l) => l.status === 'submitted');
   const stalePendingLogsCount = pendingLogs.filter((l) => (daysSinceDate(l.createdAt) || 0) > 3).length;
   const pendingLogStudentIds = [...new Set(
     pendingLogs
@@ -531,7 +535,7 @@ const InternalGuideDashboard = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <StatCard icon={Users} label="My Students" value={students.length} color="bg-blue-500" />
-                <StatCard icon={BookOpen} label="Pending Logs" value={allGuideLogs.filter(l => ['submitted', 'under_review'].includes(l.status)).length} color="bg-yellow-500" />
+                <StatCard icon={BookOpen} label="Pending Logs" value={allGuideLogs.filter((l) => l.status === 'submitted').length} color="bg-yellow-500" />
                 <StatCard icon={CheckCircle2} label="Reviewed" value={allGuideLogs.filter(l => ['approved', 'needs_revision'].includes(l.status)).length} color="bg-green-500" />
               </div>
 
@@ -1096,6 +1100,10 @@ const InternalGuideDashboard = () => {
                           <button onClick={() => handleReviewLog(log._id, 'approved')}
                             className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 flex items-center gap-1">
                             <CheckCircle2 size={14} /> Approve
+                          </button>
+                          <button onClick={() => handleReviewLog(log._id, 'under_review')}
+                            className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 flex items-center gap-1">
+                            <Clock size={14} /> Under Review
                           </button>
                           <button onClick={() => handleReviewLog(log._id, 'needs_revision')}
                             className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600 flex items-center gap-1">

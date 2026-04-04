@@ -4,6 +4,18 @@ const DepartmentMentor = require('../models/DepartmentMentor');
 const DEPARTMENTS = ['SOCSET', 'SOTE', 'SOB', 'SAAD'];
 const Application = require("../models/Application");
 
+const normalizeDepartment = (value) => String(value || '').trim().toUpperCase();
+
+const getDepartmentAliases = (department) => {
+  const normalized = normalizeDepartment(department);
+  if (!normalized) return [];
+
+  const aliases = new Set([normalized]);
+  if (normalized === 'SOCSET') aliases.add('SOSCET');
+  if (normalized === 'SOSCET') aliases.add('SOCSET');
+  return [...aliases];
+};
+
 // Get all mentor assignments
 exports.getAllMentors = async (req, res) => {
   try {
@@ -169,23 +181,30 @@ exports.removeMentor = async (req, res) => {
 exports.getDepartmentStudents = async (req, res) => {
   try {
     const mentorId = req.user._id;
-    const department = req.user.department; // set by middleware/login
+    const assignment = await DepartmentMentor.findOne({ mentorId }).select('department').lean();
+    const department = req.user.department || assignment?.department || null;
 
     if (!department) {
       return res.status(400).json({ message: 'Your mentor account is not associated with a department' });
     }
 
-    // verify assignment still exists
-    const mentorAssignment = await DepartmentMentor.findOne({ department, mentorId });
-    if (!mentorAssignment) {
-      return res.status(403).json({ message: 'You are not assigned to this department' });
-    }
+    const departmentAliases = getDepartmentAliases(department);
+    const departmentRegexes = departmentAliases.map((dept) => new RegExp(`^${dept}$`, 'i'));
 
-    // Fetch all students from this department including offer-letter fields for mentor visibility
-    const students = await User.find({ department, role: 'student' })
-      .select('name email profile createdAt offerLetterName offerLetterUrl offerLetterHash branch enrollmentNo department');
+    const students = await User.find({
+      role: 'student',
+      $or: [
+        { mentorId },
+        { department: { $in: departmentRegexes } },
+      ],
+    })
+      .select('name email phone contact bio branch department year semester semesterStartDate cgpa skills resumeUrl resumeName offerLetterName offerLetterUrl offerLetterHash enrollmentNo specialization createdAt');
 
-    res.json({ department, students });
+    const uniqueStudents = Array.from(new Map(
+      students.map((student) => [student._id.toString(), student])
+    ).values());
+
+    res.json({ department, students: uniqueStudents });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch department students', error: err.message });
   }

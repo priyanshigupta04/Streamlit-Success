@@ -65,6 +65,17 @@ const MentorDashboard = () => {
 
     return entries;
   };
+  const formatSemester = (semester) => {
+    if (semester === null || semester === undefined || semester === '') return 'N/A';
+    return `Semester ${semester}`;
+  };
+
+  const formatSkills = (skills) => {
+    if (!skills) return 'N/A';
+    if (Array.isArray(skills)) return skills.filter(Boolean).join(', ') || 'N/A';
+    if (typeof skills === 'object') return Object.values(skills).filter(Boolean).join(', ') || 'N/A';
+    return String(skills);
+  };
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
 
@@ -767,11 +778,42 @@ const MentorDashboard = () => {
 
                   {students.map((s) => {
                     const studentInterviews = getStudentInterviews(s._id);
+                    const studentMeta = [
+                      { label: 'Department', value: s.department || 'N/A' },
+                      { label: 'Branch', value: s.branch || 'N/A' },
+                      { label: 'Semester', value: formatSemester(s.semester) },
+                      { label: 'Enrollment No.', value: s.enrollmentNo || 'N/A' },
+                      { label: 'Year', value: s.year || 'N/A' },
+                      { label: 'CGPA', value: s.cgpa || 'N/A' },
+                      { label: 'Phone', value: s.phone || s.contact || 'N/A' },
+                      { label: 'Specialization', value: s.specialization || 'N/A' },
+                    ];
 
                     return (
-                      <div key={s._id} className="p-4 bg-white rounded-lg shadow-sm">
-                        <p className="font-medium text-gray-800">{s.name}</p>
-                        <p className="text-sm text-gray-500">{s.email}</p>
+                      <div key={s._id} className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-semibold text-gray-800 text-lg">{s.name}</p>
+                            <p className="text-sm text-gray-500">{s.email}</p>
+                          </div>
+                          <div className="text-right text-xs text-gray-400">
+                            <p>Registered: {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'N/A'}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700">
+                          {studentMeta.map((item) => (
+                            <div key={`${s._id}-${item.label}`} className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</span>
+                              <span className="text-right break-words">{item.value}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 mb-1">Skills</p>
+                          <p className="text-indigo-900">{formatSkills(s.skills)}</p>
+                        </div>
 
                         <div className="mt-2">
                           {s.offerLetterUrl ? (
