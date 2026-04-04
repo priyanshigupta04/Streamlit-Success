@@ -38,7 +38,7 @@ function Start-ServiceWindow {
 }
 
 Start-ServiceWindow -Name "AI Engine" -WorkingDir (Join-Path $root "resume_ai") -Command "python -m uvicorn api:app --host 0.0.0.0 --port 8000" -Port 8000
-Start-ServiceWindow -Name "Backend" -WorkingDir (Join-Path $root "backend") -Command "npm run dev" -Port 5000
+Start-ServiceWindow -Name "Backend" -WorkingDir (Join-Path $root "backend") -Command "$env:AI_SERVICE_URL='http://127.0.0.1:8000'; npm run dev" -Port 5000
 Start-ServiceWindow -Name "Frontend" -WorkingDir (Join-Path $root "frontend") -Command "npm start" -Port 3000
 
 Write-Host "`nDone. If all services were down, 3 new terminals should now be running." -ForegroundColor Cyan

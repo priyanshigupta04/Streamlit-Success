@@ -255,21 +255,23 @@ const StudentDashboard = () => {
     const fetchProfile = async () => {
       try {
         const res = await axios.get("/api/profile");
-        setProfile(normalizeUser(res.data));
+        const normalizedProfile = normalizeUser(res.data);
+        setProfile(normalizedProfile);
+        await fetchJobs(0, normalizedProfile);
       } catch (err) {
         console.error("Profile fetch failed", err);
+        await fetchJobs(0, profile);
       }
     };
 
     fetchProfile();
     fetchInternshipForms();
     fetchApplications();
-    fetchJobs();
     fetchMyLogs();
     fetchDocuments(); // Load document requests on mount
   }, []);
 
-  const fetchJobs = async (retryAttempt = 0) => {
+  const fetchJobs = async (retryAttempt = 0, profileSnapshot = profile) => {
     const mapJobs = (items) => (items || []).map(j => ({
       id: j._id,
       company: j.company,
@@ -282,6 +284,73 @@ const StudentDashboard = () => {
       raw: j,
     }));
 
+    const normalizeSkillList = (skillsValue) => {
+      if (Array.isArray(skillsValue)) {
+        return skillsValue.map((s) => String(s || '').trim()).filter(Boolean);
+      }
+      return String(skillsValue || '').split(',').map((s) => s.trim()).filter(Boolean);
+    };
+
+    const canonicalizeSkill = (skill) => {
+      const raw = String(skill || '').toLowerCase().trim();
+      if (!raw) return '';
+      const cleaned = raw.replace(/\b(basic|intermediate|advanced|beginner)\b/g, '').replace(/\s+/g, ' ').trim();
+      const compact = cleaned.replace(/[\s._-]+/g, '');
+
+      if (compact === 'reactjs' || cleaned === 'react js' || cleaned === 'react') return 'react';
+      if (compact === 'nodejs' || cleaned === 'node js' || cleaned === 'node') return 'node.js';
+      if (cleaned === 'js' || compact === 'javascript') return 'javascript';
+      if (compact === 'html5' || cleaned === 'html') return 'html';
+      if (compact === 'css3' || cleaned === 'css') return 'css';
+      if (compact === 'nextjs' || cleaned === 'next js' || cleaned === 'next.js') return 'next.js';
+      return cleaned;
+    };
+
+    const buildDisplaySkills = (requiredSkills, canonicalSkills) => {
+      const canonicalSet = new Set(canonicalSkills || []);
+      const seen = new Set();
+      const display = [];
+
+      for (const skill of requiredSkills || []) {
+        const canonical = canonicalizeSkill(skill);
+        if (!canonical || !canonicalSet.has(canonical) || seen.has(canonical)) continue;
+        seen.add(canonical);
+        display.push(String(skill || '').trim() || canonical);
+      }
+
+      return display;
+    };
+
+    const profileSkillSet = new Set(normalizeSkillList(profile?.skills).map(canonicalizeSkill).filter(Boolean));
+
+    const mergeProfileSkillImpact = (job) => {
+      const requiredSkills = Array.isArray(job?.raw?.requiredSkills) ? job.raw.requiredSkills : [];
+      if (!requiredSkills.length || !profileSkillSet.size) return job;
+
+      const normalizedRequired = requiredSkills.map(canonicalizeSkill).filter(Boolean);
+      if (!normalizedRequired.length) return job;
+
+      const aiMatched = new Set((job.matchData?.matchedSkills || []).map(canonicalizeSkill).filter(Boolean));
+      const mergedMatched = normalizedRequired.filter((skill) => aiMatched.has(skill) || profileSkillSet.has(skill));
+      const missingSkills = normalizedRequired.filter((skill) => !mergedMatched.includes(skill));
+
+      const overlapScore = Math.round((mergedMatched.length / normalizedRequired.length) * 100);
+      const gainedFromProfile = mergedMatched.filter((skill) => !aiMatched.has(skill)).length;
+      const baseOverall = typeof job.matchData?.overallScore === 'number' ? job.matchData.overallScore : 0;
+      const boostedOverall = Math.min(100, Math.max(baseOverall, overlapScore, Math.round(baseOverall + gainedFromProfile * 6)));
+
+      return {
+        ...job,
+        matchData: {
+          ...(job.matchData || {}),
+          overallScore: boostedOverall,
+          skillOverlap: overlapScore,
+          matchedSkills: buildDisplaySkills(requiredSkills, mergedMatched),
+          missingSkills: buildDisplaySkills(requiredSkills, missingSkills),
+        },
+      };
+    };
+
     const sortJobs = (items) => items.sort((a, b) => {
       const aScore = a.matchData?.overallScore;
       const bScore = b.matchData?.overallScore;
@@ -292,8 +361,18 @@ const StudentDashboard = () => {
     });
 
     const buildResumeTextForAi = (nextProfile) => {
-      if (nextProfile?.resumeText && String(nextProfile.resumeText).trim().length >= 20) {
-        return String(nextProfile.resumeText).trim();
+      const profileSkills = normalizeSkillList(nextProfile?.skills);
+      const rawResumeText = String(nextProfile?.resumeText || '').trim();
+
+      if (rawResumeText.length >= 20) {
+        const lowerResumeText = rawResumeText.toLowerCase();
+        const missingProfileSkills = profileSkills.filter((skill) => !lowerResumeText.includes(skill.toLowerCase()));
+
+        if (!missingProfileSkills.length) {
+          return rawResumeText;
+        }
+
+        return `${rawResumeText}\n\nAdditional Profile Skills: ${missingProfileSkills.join(', ')}`;
       }
 
       const sections = [
@@ -304,7 +383,7 @@ const StudentDashboard = () => {
         `Specialization: ${nextProfile?.specialization || ''}`,
         `Semester: ${nextProfile?.semester || ''}`,
         `CGPA: ${nextProfile?.cgpa || ''}`,
-        `Skills: ${nextProfile?.skills || ''}`,
+        `Skills: ${profileSkills.join(', ')}`,
         `Projects: ${nextProfile?.projects || ''}`,
         `Bio: ${nextProfile?.internshipReason || ''}`,
       ];
@@ -322,11 +401,12 @@ const StudentDashboard = () => {
       const rawJobs = jobsRes.data.jobs || [];
       const mappedFallback = sortJobs(mapJobs(rawJobs));
 
-      const resumeTextForAi = buildResumeTextForAi(profile);
+      const profileForAi = profileSnapshot || profile;
+      const resumeTextForAi = buildResumeTextForAi(profileForAi);
       const canUseAi = String(resumeTextForAi || '').trim().length >= 20 && rawJobs.length > 0;
 
       if (!canUseAi) {
-        setJobs(mappedFallback);
+        setJobs(sortJobs(mappedFallback.map(mergeProfileSkillImpact)));
         setAiAnalysis(null);
         setAiMeta({
           serviceStatus: { analysis: 'skipped', recommendation: 'fallback' },
@@ -336,11 +416,11 @@ const StudentDashboard = () => {
           profileCompleteness: estimateProfileCompleteness(profile),
           usedFallbackRanking: true,
           profileSnapshot: {
-            branch: profile.branch || '',
-            specialization: profile.specialization || '',
-            semester: profile.semester || null,
-            cgpa: profile.cgpa || '',
-            skillCount: String(profile.skills || '').split(',').map((s) => s.trim()).filter(Boolean).length,
+            branch: profileForAi.branch || '',
+            specialization: profileForAi.specialization || '',
+            semester: profileForAi.semester || null,
+            cgpa: profileForAi.cgpa || '',
+            skillCount: String(profileForAi.skills || '').split(',').map((s) => s.trim()).filter(Boolean).length,
           },
         });
         return;
@@ -350,6 +430,7 @@ const StudentDashboard = () => {
         axios.post('/api/ai/analyze', { resumeText: resumeTextForAi }, { timeout: RECOMMENDED_JOBS_TIMEOUT_MS }),
         axios.post('/api/ai/recommend', {
           resumeText: resumeTextForAi,
+          profileSkills: normalizeSkillList(profileForAi?.skills),
           jobs: rawJobs,
         }, { timeout: RECOMMENDED_JOBS_TIMEOUT_MS }),
       ]);
@@ -361,14 +442,14 @@ const StudentDashboard = () => {
         warnings: aiWarnings,
         resumeSource: profile.resumeText ? 'resumeText' : 'profileSynthesized',
         jobsConsidered: rawJobs.length,
-        profileCompleteness: estimateProfileCompleteness(profile),
+        profileCompleteness: estimateProfileCompleteness(profileForAi),
         usedFallbackRanking: false,
         profileSnapshot: {
-          branch: profile.branch || '',
-          specialization: profile.specialization || '',
-          semester: profile.semester || null,
-          cgpa: profile.cgpa || '',
-          skillCount: String(profile.skills || '').split(',').map((s) => s.trim()).filter(Boolean).length,
+          branch: profileForAi.branch || '',
+          specialization: profileForAi.specialization || '',
+          semester: profileForAi.semester || null,
+          cgpa: profileForAi.cgpa || '',
+          skillCount: String(profileForAi.skills || '').split(',').map((s) => s.trim()).filter(Boolean).length,
         },
       };
 
@@ -393,7 +474,7 @@ const StudentDashboard = () => {
                 missingSkills: rank.missingSkills || [],
               } }
             : job;
-        }).sort((a, b) => {
+        }).map(mergeProfileSkillImpact).sort((a, b) => {
           const aScore = a.matchData?.overallScore;
           const bScore = b.matchData?.overallScore;
           if (typeof aScore === 'number' && typeof bScore === 'number') return bScore - aScore;
@@ -418,7 +499,7 @@ const StudentDashboard = () => {
       nextMeta.serviceStatus.recommendation = 'fallback';
       nextMeta.usedFallbackRanking = true;
       aiWarnings.push('Showing profile-skill-based fallback ranking.');
-      setJobs(mappedFallback);
+      setJobs(sortJobs(mappedFallback.map(mergeProfileSkillImpact)));
       setAiAnalysis(nextAnalysis);
       setAiMeta(nextMeta);
 
@@ -430,7 +511,7 @@ const StudentDashboard = () => {
       if (recommendationStatus === 'fallback' && transientAiFailure && retryAttempt < 3) {
         const delayMs = 4000 * (retryAttempt + 1);
         aiRetryTimerRef.current = setTimeout(() => {
-          fetchJobs(retryAttempt + 1);
+          fetchJobs(retryAttempt + 1, profileForAi);
         }, delayMs);
       }
     } catch (err) {
@@ -447,7 +528,7 @@ const StudentDashboard = () => {
       if (retryAttempt < 3) {
         const delayMs = 4000 * (retryAttempt + 1);
         aiRetryTimerRef.current = setTimeout(() => {
-          fetchJobs(retryAttempt + 1);
+          fetchJobs(retryAttempt + 1, profileForAi);
         }, delayMs);
       }
     }

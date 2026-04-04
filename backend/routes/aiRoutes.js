@@ -20,7 +20,10 @@ const getAiBases = () => {
     .split(",")
     .map(normalizeAiUrl)
     .filter(Boolean);
-  const candidates = [primary, ...list, normalizeAiUrl(DEFAULT_AI_SERVICE_URL)].filter(Boolean);
+  const localDefault = normalizeAiUrl("http://127.0.0.1:8000");
+  const candidates = isProduction
+    ? [primary, ...list, normalizeAiUrl(DEFAULT_AI_SERVICE_URL)].filter(Boolean)
+    : [primary, ...list, localDefault, normalizeAiUrl(DEFAULT_AI_SERVICE_URL)].filter(Boolean);
   const filtered = isProduction ? candidates.filter((url) => !isLocalAiUrl(url)) : candidates;
   const unique = [...new Set((filtered.length ? filtered : candidates).filter(Boolean))];
   unique.sort((a, b) => Number(isLocalAiUrl(a)) - Number(isLocalAiUrl(b)));
@@ -63,6 +66,99 @@ const summarizeError = (err) => {
   const detail =
     err?.response?.data?.detail || err?.response?.data?.message || err?.message || "unknown error";
   return status ? `${status}: ${detail}` : String(detail);
+};
+
+const normalizeSkillList = (skillsValue) => {
+  if (Array.isArray(skillsValue)) {
+    return skillsValue.map((s) => String(s || '').trim()).filter(Boolean);
+  }
+  return String(skillsValue || '').split(',').map((s) => s.trim()).filter(Boolean);
+};
+
+const canonicalizeSkill = (skill) => {
+  const raw = String(skill || '').toLowerCase().trim();
+  if (!raw) return '';
+
+  const cleaned = raw
+    .replace(/\b(basic|intermediate|advanced|beginner)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const compact = cleaned.replace(/[\s._-]+/g, '');
+
+  if (compact === 'reactjs' || cleaned === 'react js' || cleaned === 'react') return 'react';
+  if (compact === 'nodejs' || cleaned === 'node js' || cleaned === 'node') return 'node.js';
+  if (cleaned === 'js' || compact === 'javascript') return 'javascript';
+  if (compact === 'html5' || cleaned === 'html') return 'html';
+  if (compact === 'css3' || cleaned === 'css') return 'css';
+  if (compact === 'nextjs' || cleaned === 'next js' || cleaned === 'next.js') return 'next.js';
+  if (compact === 'angularjs' || cleaned.includes('angular')) return 'angular';
+
+  return cleaned;
+};
+
+const clampScore = (value) => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+
+const buildDisplaySkillList = (requiredSkills, canonicalSet) => {
+  const display = [];
+  const seen = new Set();
+  for (const skill of requiredSkills || []) {
+    const canonical = canonicalizeSkill(skill);
+    if (!canonical || !canonicalSet.has(canonical) || seen.has(canonical)) continue;
+    seen.add(canonical);
+    display.push(String(skill || '').trim() || canonical);
+  }
+  return display;
+};
+
+const mergeSkillSignalsIntoRankings = (rankings, jobs, profileSkills) => {
+  const profileSkillSet = new Set(normalizeSkillList(profileSkills).map(canonicalizeSkill).filter(Boolean));
+  if (!profileSkillSet.size) return rankings;
+
+  const jobById = new Map((jobs || []).map((job) => [String(job?._id || job?.id || ''), job]));
+
+  return (rankings || []).map((rank) => {
+    const job = jobById.get(String(rank?.jobId || ''));
+    if (!job) return rank;
+
+    const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
+    if (!requiredSkills.length) return rank;
+
+    const normalizedRequired = requiredSkills.map(canonicalizeSkill).filter(Boolean);
+    if (!normalizedRequired.length) return rank;
+
+    const aiMatched = new Set(normalizeSkillList(rank?.matchedSkills).map(canonicalizeSkill).filter(Boolean));
+    const mergedMatched = new Set(aiMatched);
+
+    for (const required of normalizedRequired) {
+      if (profileSkillSet.has(required)) mergedMatched.add(required);
+    }
+
+    const missingCanonical = normalizedRequired.filter((required) => !mergedMatched.has(required));
+    const skillOverlap = clampScore((mergedMatched.size / normalizedRequired.length) * 100);
+    const profileMatchBoost = Math.max(0, mergedMatched.size - aiMatched.size) * 6;
+    const adjustedOverall = clampScore(Math.max(rank?.overallScore || 0, skillOverlap, (rank?.overallScore || 0) + profileMatchBoost));
+
+    return {
+      ...rank,
+      overallScore: adjustedOverall,
+      skillOverlap,
+      matchedSkills: buildDisplaySkillList(requiredSkills, mergedMatched),
+      missingSkills: buildDisplaySkillList(requiredSkills, new Set(missingCanonical)),
+    };
+  });
+};
+
+const mergeProfileSkillsIntoResumeText = (resumeText, profileSkills) => {
+  const baseText = String(resumeText || '').trim();
+  const skills = normalizeSkillList(profileSkills);
+
+  if (!skills.length) return baseText;
+
+  const lowerBase = baseText.toLowerCase();
+  const missingSkills = skills.filter((skill) => !lowerBase.includes(skill.toLowerCase()));
+  if (!missingSkills.length) return baseText;
+
+  return `${baseText}\n\nAdditional Profile Skills: ${missingSkills.join(', ')}`;
 };
 
 let wakeupInFlight = null;
@@ -144,15 +240,24 @@ router.post("/analyze", protect, async (req, res) => {
 // POST /api/ai/recommend — get job recommendations for student
 router.post("/recommend", protect, async (req, res) => {
   try {
-    const { resumeText, jobs } = req.body;
+    const { resumeText, jobs, profileSkills } = req.body;
     if (!resumeText || !jobs) return res.status(400).json({ message: "resumeText and jobs are required" });
+
+    const enrichedResumeText = mergeProfileSkillsIntoResumeText(resumeText, profileSkills);
 
     const response = await postToAiWithFallback(
       "/recommend",
-      { resume_text: resumeText, jobs },
+      { resume_text: enrichedResumeText, jobs },
       AI_REQUEST_TIMEOUT_MS
     );
-    res.json(response.data);
+    const rankings = Array.isArray(response.data?.rankings)
+      ? mergeSkillSignalsIntoRankings(response.data.rankings, jobs, profileSkills)
+      : response.data?.rankings;
+
+    res.json({
+      ...response.data,
+      rankings,
+    });
   } catch (err) {
     console.error("AI recommend error:", summarizeError(err));
     res.status(502).json({ message: "AI service unavailable", error: summarizeError(err) });
