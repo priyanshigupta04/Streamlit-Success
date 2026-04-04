@@ -3,8 +3,19 @@ const crypto = require('crypto');
 const path = require('path');
 const User   = require('../models/User');
 const Notification = require('../models/Notification');
+const InternshipForm = require('../models/InternshipForm');
 const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
 const AI_BASE = process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
+
+const normalizeDepartment = (value) => String(value || '').trim().toUpperCase();
+
+const isDepartmentAliasMatch = (studentDept, mentorDept) => {
+  const student = normalizeDepartment(studentDept);
+  const mentor = normalizeDepartment(mentorDept);
+  if (!student || !mentor) return false;
+  if (student === mentor) return true;
+  return (student === 'SOCSET' && mentor === 'SOSCET') || (student === 'SOSCET' && mentor === 'SOCSET');
+};
 
 const buildSenderMeta = (req) => ({
   sender: {
@@ -275,13 +286,21 @@ const viewOfferLetter = async (req, res) => {
       req.user.role === 'mentor' &&
       student.mentorId &&
       student.mentorId.toString() === req.user._id.toString();
+
+    const hasMentorInternshipFormLink =
+      req.user.role === 'mentor' &&
+      await InternshipForm.exists({
+        student: studentId,
+        mentor: req.user._id,
+      });
+
     const isSameDepartmentMentor =
       req.user.role === 'mentor' &&
       student.department &&
       req.user.department &&
-      student.department.toLowerCase() === req.user.department.toLowerCase();
+      isDepartmentAliasMatch(student.department, req.user.department);
 
-    if (!(isOwner || isPlacement || isAssignedMentor || isSameDepartmentMentor)) {
+    if (!(isOwner || isPlacement || isAssignedMentor || hasMentorInternshipFormLink || isSameDepartmentMentor)) {
       return res.status(403).json({ message: 'Not authorized to view this offer letter' });
     }
 

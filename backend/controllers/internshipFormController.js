@@ -1,6 +1,7 @@
 const InternshipForm = require("../models/InternshipForm");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const DepartmentMentor = require("../models/DepartmentMentor");
 
 const buildSenderMeta = (req) => ({
   sender: {
@@ -9,6 +10,20 @@ const buildSenderMeta = (req) => ({
     role: req?.user?.role || '',
   },
 });
+
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeDepartment = (value) => String(value || '').trim().toUpperCase();
+
+const getDepartmentAliases = (department) => {
+  const normalized = normalizeDepartment(department);
+  if (!normalized) return [];
+
+  const aliases = new Set([normalized]);
+  if (normalized === 'SOCSET') aliases.add('SOSCET');
+  if (normalized === 'SOSCET') aliases.add('SOCSET');
+  return [...aliases];
+};
 
 // @desc    Submit internship form
 // @route   POST /api/internship-forms
@@ -25,10 +40,21 @@ const submitForm = async (req, res) => {
 
     const { companyName, role, stipend, companyAddress, joiningDate, internshipPeriod, extraDetails } = req.body;
 
+    let resolvedMentorId = req.user.mentorId || null;
+    if (!resolvedMentorId && req.user.department) {
+      const deptAliases = getDepartmentAliases(req.user.department);
+      const assignment = await DepartmentMentor.findOne({ department: { $in: deptAliases } })
+        .select('mentorId')
+        .lean();
+      if (assignment?.mentorId) {
+        resolvedMentorId = assignment.mentorId;
+      }
+    }
+
     const newForm = new InternshipForm({
       student: req.user._id,
       department: req.user.department || 'Unknown',
-      mentor: req.user.mentorId, // Attach the student's mentor
+      mentor: resolvedMentorId,
       companyName,
       role,
       stipend,
@@ -42,15 +68,40 @@ const submitForm = async (req, res) => {
 
     const studentName = req.user.name || 'A student';
 
-    if (req.user.mentorId) {
-      await Notification.send(
-        req.user.mentorId,
-        'announcement',
-        'New Internship Form Submitted',
-        `${studentName} submitted an internship form for ${companyName} (${role}). Please review it from Mentor Dashboard.`,
-        '/mentor-dashboard',
-        buildSenderMeta(req)
-      );
+    const mentorTargetIds = new Set();
+    if (resolvedMentorId) mentorTargetIds.add(String(resolvedMentorId));
+
+    if (req.user.department) {
+      const deptAliases = getDepartmentAliases(req.user.department);
+
+      const deptMappings = await DepartmentMentor.find({ department: { $in: deptAliases } })
+        .select('mentorId')
+        .lean();
+      for (const mapping of deptMappings) {
+        if (mapping?.mentorId) mentorTargetIds.add(String(mapping.mentorId));
+      }
+
+      const deptMentorUsers = await User.find({ role: 'mentor', department: { $in: deptAliases } })
+        .select('_id')
+        .lean();
+      for (const mentor of deptMentorUsers) {
+        if (mentor?._id) mentorTargetIds.add(String(mentor._id));
+      }
+    }
+
+    for (const mentorId of mentorTargetIds) {
+      try {
+        await Notification.send(
+          mentorId,
+          'announcement',
+          'New Internship Form Submitted',
+          `${studentName} submitted an internship form for ${companyName} (${role}). Please review it from Mentor Dashboard.`,
+          '/mentor-dashboard',
+          buildSenderMeta(req)
+        );
+      } catch (notifyErr) {
+        console.error('Mentor internship-form notification failed:', notifyErr.message);
+      }
     }
 
     const placementUsers = await User.find({ role: 'placement_cell' }).select('_id').lean();
@@ -88,16 +139,21 @@ const getForms = async (req, res) => {
     } 
     
     if (req.user.role === 'mentor') {
-      // Find forms where the form's department matches the mentor's department
-      // Use case-insensitive regex for department matching to prevent typos (SOCSET vs SOSCET)
-      // or at least be forgiving about capitalization
-      const deptRegex = new RegExp(`^${req.user.department}$`, 'i');
-      
+      const deptAliases = getDepartmentAliases(req.user.department);
+      const deptFilters = deptAliases.map((dept) => ({ department: new RegExp(`^${escapeRegex(dept)}$`, 'i') }));
+      const assignedStudents = await User.find({ mentorId: req.user._id, role: 'student' }).select('_id').lean();
+      const assignedStudentIds = assignedStudents.map((s) => s._id);
+
+      const mentorScope = [{ mentor: req.user._id }];
+      if (assignedStudentIds.length > 0) {
+        mentorScope.push({ student: { $in: assignedStudentIds } });
+      }
+      if (deptFilters.length > 0) {
+        mentorScope.push(...deptFilters);
+      }
+
       const forms = await InternshipForm.find({
-        $or: [
-          { department: deptRegex },
-          { mentor: req.user._id }
-        ]
+        $or: mentorScope,
       })
         .populate('student', 'name email branch enrollmentNo department offerLetterName offerLetterUrl offerLetterHash')
         .populate('internalGuide', 'name email');

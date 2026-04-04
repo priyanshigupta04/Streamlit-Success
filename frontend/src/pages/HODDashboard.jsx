@@ -215,6 +215,33 @@ const HODDashboard = () => {
 
   const getDocType = (doc) => doc?.documentType || doc?.type || 'N/A';
 
+  const getRequestDetailEntries = (doc) => {
+    const details = doc?.requestDetails && typeof doc.requestDetails === 'object' ? doc.requestDetails : {};
+    const entries = Object.entries(details)
+      .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+      .map(([key, value]) => {
+        const label = key
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (char) => char.toUpperCase());
+        const displayValue = Array.isArray(value)
+          ? value.join(', ')
+          : value instanceof Date
+            ? value.toLocaleDateString()
+            : key.toLowerCase().includes('date')
+              ? new Date(value).toLocaleDateString()
+              : String(value);
+
+        return [label, displayValue];
+      });
+
+    if (doc?.reason) {
+      entries.unshift(['Request Reason', doc.reason]);
+    }
+
+    return entries;
+  };
+
   const getFilteredPendingDocs = () => {
     return pendingDocs.filter((doc) => {
       const docType = getDocType(doc).toLowerCase();
@@ -825,6 +852,20 @@ const HODDashboard = () => {
                         <div className="bg-blue-50 p-3 rounded-lg mb-4">
                           <p className="text-xs font-medium text-blue-600 mb-1">Mentor Note:</p>
                           <p className="text-sm text-blue-800">{doc.mentorApproval.note}</p>
+                        </div>
+                      )}
+
+                      {getRequestDetailEntries(doc).length > 0 && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Request Details</p>
+                          <dl className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {getRequestDetailEntries(doc).map(([label, value]) => (
+                              <div key={`${doc._id}-${label}`}>
+                                <dt className="text-[11px] font-semibold uppercase text-slate-400">{label}</dt>
+                                <dd className="text-slate-700 break-words">{value}</dd>
+                              </div>
+                            ))}
+                          </dl>
                         </div>
                       )}
 

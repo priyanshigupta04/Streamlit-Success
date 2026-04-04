@@ -16,6 +16,30 @@ const buildSenderMeta = (req) => ({
 
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const formatRequestDetailsSummary = (requestDetails = {}) => {
+  const entries = Object.entries(requestDetails || {})
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+    .map(([key, value]) => {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+
+      let displayValue = value;
+      if (Array.isArray(displayValue)) {
+        displayValue = displayValue.join(', ');
+      } else if (displayValue instanceof Date) {
+        displayValue = displayValue.toLocaleDateString();
+      } else if (typeof displayValue === 'object') {
+        displayValue = JSON.stringify(displayValue);
+      }
+
+      return `${label}: ${displayValue}`;
+    });
+
+  return entries.join(' | ');
+};
+
 const resolveMentorUserId = async (student) => {
   if (student?.mentorId) {
     return student.mentorId;
@@ -45,9 +69,10 @@ const buildDocumentNotification = (type, studentName, requestDetails = {}) => {
   }[type] || 'Document Request';
 
   const targetName = requestDetails?.orgName || requestDetails?.applyingFor || 'document details';
+  const detailsSummary = formatRequestDetailsSummary(requestDetails);
   const message = type === 'noc'
-    ? `${studentName || 'A student'} submitted a NOC request for ${requestDetails?.orgName || 'an organization'} (${requestDetails?.role || 'role not specified'}).`
-    : `${studentName || 'A student'} submitted a ${documentLabel.toLowerCase()} for ${targetName}.`;
+    ? `${studentName || 'A student'} submitted a NOC request for ${requestDetails?.orgName || 'an organization'} (${requestDetails?.role || 'role not specified'}). ${detailsSummary ? `Details: ${detailsSummary}` : ''}`
+    : `${studentName || 'A student'} submitted a ${documentLabel.toLowerCase()} for ${targetName}. ${detailsSummary ? `Details: ${detailsSummary}` : ''}`;
 
   return { documentLabel, message };
 };
@@ -71,39 +96,45 @@ exports.requestDocument = async (req, res) => {
     });
 
     const mentorUserId = await resolveMentorUserId(student);
-    if (mentorUserId) {
-      try {
-        const { documentLabel, message } = buildDocumentNotification(type, student?.name || 'A student', requestDetails);
+    const { documentLabel, message } = buildDocumentNotification(type, student?.name || 'A student', requestDetails);
+    const recipients = [];
 
+    if (mentorUserId) {
+      recipients.push({ userId: mentorUserId.toString(), link: '/mentor-dashboard' });
+    } else {
+      const mentors = await User.find({ role: 'mentor' }).select('_id').lean();
+      mentors.forEach((mentor) => recipients.push({ userId: mentor._id.toString(), link: '/mentor-dashboard' }));
+    }
+
+    const approvers = await User.find({ role: { $in: ['hod', 'dean'] } }).select('_id role').lean();
+    approvers.forEach((approver) => {
+      recipients.push({
+        userId: approver._id.toString(),
+        link: approver.role === 'dean' ? '/dean-dashboard' : '/hod-dashboard',
+      });
+    });
+
+    const uniqueRecipients = new Map();
+    recipients.forEach((recipient) => {
+      if (!uniqueRecipients.has(recipient.userId)) {
+        uniqueRecipients.set(recipient.userId, recipient.link);
+      }
+    });
+
+    try {
+      for (const [recipientId, link] of uniqueRecipients.entries()) {
         await Notification.send(
-          mentorUserId,
+          recipientId,
           'document_status',
           documentLabel,
           message,
-          '/mentor-dashboard',
+          link,
           { sender: { id: req.user?._id || null, name: student?.name || '', role: 'student' } }
         );
-      } catch (notifyErr) {
-        // Request should succeed even if notification dispatch fails.
-        console.error('Notification dispatch failed for document request:', notifyErr.message);
       }
-    } else {
-      try {
-        const mentors = await User.find({ role: 'mentor' }).select('_id').lean();
-        const { documentLabel, message } = buildDocumentNotification(type, student?.name || 'A student', requestDetails);
-        for (const mentor of mentors) {
-          await Notification.send(
-            mentor._id,
-            'document_status',
-            documentLabel,
-            message,
-            '/mentor-dashboard',
-            { sender: { id: req.user?._id || null, name: student?.name || '', role: 'student' } }
-          );
-        }
-      } catch (broadcastErr) {
-        console.error('Mentor broadcast notification failed:', broadcastErr.message);
-      }
+    } catch (notifyErr) {
+      // Request should succeed even if notification dispatch fails.
+      console.error('Notification dispatch failed for document request:', notifyErr.message);
     }
 
     res.status(201).json({ document: doc });

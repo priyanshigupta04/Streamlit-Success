@@ -44,6 +44,34 @@ const StudentDashboard = () => {
     internshipPeriod: '',
     extraDetails: ''
   });
+
+  // 1. PROFILE STATE
+  const [profile, setProfile] = useState({
+    fullName: user?.name || 'New Student',
+    contact: '',
+    email: user?.email || '',
+    altEmail: '',
+    github: '',
+    linkedin: '',
+    cgpa: '',
+    admissionYear: '',
+    graduationYear: '',
+    enrollmentNo: '',
+    department: '',
+    semester: '',
+    semesterStartDate: '',
+    branch: '',
+    specialization: '',
+    skills: '',
+    resumeName: '',
+    resumeUrl: '',
+    offerLetterName: '',
+    offerLetterUrl: '',
+    internshipReason: '',
+    resumeText: '',
+    image: null,
+    certificates: [{ org: '', file: null }],
+  });
   
   const [submittedForms, setSubmittedForms] = useState([]);
   const [progressNow, setProgressNow] = useState(Date.now());
@@ -55,8 +83,26 @@ const StudentDashboard = () => {
       fetchDocuments();
     } else if (activeTab === 'logs') {
       fetchMyLogs();
+    } else if (activeTab === 'dashboard') {
+      fetchApplications();
+      if (profile?.fullName) {
+        fetchJobs(0, profile);
+      }
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return undefined;
+
+    const timer = setInterval(() => {
+      fetchApplications();
+      if (profile?.fullName) {
+        fetchJobs(0, profile);
+      }
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, [activeTab, profile]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -118,34 +164,6 @@ const StudentDashboard = () => {
       alert('❌ Download failed: ' + (err.response?.data?.message || err.message));
     }
   };
-  // 1. PROFILE STATE
-  const [profile, setProfile] = useState({
-    fullName: user?.name || 'New Student',
-    contact: '',
-    email: user?.email || '',
-    altEmail: '',
-    github: '',
-    linkedin: '',
-    cgpa: '',
-    admissionYear: '',
-    graduationYear: '',
-    enrollmentNo: '',
-    department: '',
-    semester: '',
-    semesterStartDate: '',
-    branch: '',
-    specialization: '', 
-    skills: '',
-    resumeName: '',
-    resumeUrl: '',
-    offerLetterName: '',
-    offerLetterUrl: '',
-    internshipReason: '',
-    resumeText: '',
-    image: null,
-  certificates: [{ org: '', file: null }],
-  });
-
    const [selectedFile, setSelectedFile] = useState(null);
   const getMaxSemestersByBranch = (branch = '') => {
     const normalized = String(branch || '').trim().toLowerCase();
@@ -547,8 +565,8 @@ const StudentDashboard = () => {
   logo: (a.jobId?.company || a.company || '?')[0].toUpperCase(),
   color: 'bg-slate-700',
   status: a.status,
-  
-  mentorApproved: a.mentorApproval?.approved || false,
+  mentorApproved: a.mentorApproval?.status === 'approved',
+  mentorRejected: a.mentorApproval?.status === 'rejected',
   interview: a.interview ? {
   date: a.interview.date,
   time: a.interview.time,
@@ -1015,7 +1033,25 @@ const StudentDashboard = () => {
   const [selectedJobPreview, setSelectedJobPreview] = useState(null);
   const [isApplyingFromPreview, setIsApplyingFromPreview] = useState(false);
 
-  const filteredJobs = jobs
+  const getApplicationForJob = (job) => {
+    if (!job) return null;
+    return myApplications.find(
+      (a) =>
+        a.jobId?._id === job.id ||
+        a.jobId === job.id ||
+        a.id === job.id ||
+        (a.company === job.company && a.role === job.role)
+    ) || null;
+  };
+
+  const hasMentorApprovedApplicationForJob = (job) => {
+    const application = getApplicationForJob(job);
+    return Boolean(application?.mentorApproved);
+  };
+
+  const visibleJobs = jobs.filter((job) => !hasMentorApprovedApplicationForJob(job));
+
+  const filteredJobs = visibleJobs
     .filter(job =>
       job.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.company.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1071,13 +1107,7 @@ const handleApplyFromPreview = async () => {
 
 const hasAlreadyAppliedForJob = (job) => {
   if (!job) return false;
-  return myApplications.some(
-    (a) =>
-      a.jobId?._id === job.id ||
-      a.jobId === job.id ||
-      a.id === job.id ||
-      (a.company === job.company && a.role === job.role)
-  );
+  return Boolean(getApplicationForJob(job));
 };
 
 const getJobFieldText = (value) => {
