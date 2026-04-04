@@ -721,21 +721,14 @@ const StudentDashboard = () => {
   const handleSubmit = async () => {
   const { orgName, role, mode, startDate, duration, applyingFor, targetUni, faculty, achievements, bonafidePurpose } = docFormData;
 
-  // 1. NOC Validation
-  if (activeDocType === 'NOC Request') {
-    if (!orgName || !role || !mode) {
-      alert("⚠️ Please fill Company, Role, and Mode fields!");
-      return;
-    }
-  } 
-  // 2. LOR Validation
-  else if (activeDocType === 'LOR Request') {
+  // 1. LOR Validation
+  if (activeDocType === 'LOR Request') {
     if (!applyingFor) {
       alert("⚠️ Please fill in what you are applying for (e.g. Higher Studies, Job at XYZ).");
       return;
     }
   } 
-  // 3. Bonafide Validation
+  // 2. Bonafide Validation
   else if (activeDocType === 'Bonafide') {
     if (!bonafidePurpose) {
       alert("⚠️ Please select the purpose for Bonafide Certificate!");
@@ -773,38 +766,36 @@ const StudentDashboard = () => {
     try {
       let docType = '';
       let reason = '';
-      let jobId = null;
+      const requestDetails = {};
       
       // Determine document type and extract relevant data
       if (type === 'NOC Request') {
         docType = 'noc';
-        reason = `NOC for ${docFormData.orgName} - ${docFormData.role} role`;
-        
-        // Find the matching application/job for this company
-        const matchingApp = myApplications.find(app => 
-          app.company?.toLowerCase() === docFormData.orgName?.toLowerCase()
-        );
-        if (matchingApp?.jobId) {
-          jobId = matchingApp.jobId;
-        }
-        
-        if (!jobId) {
-          alert('⚠️ Could not find matching job application. Please apply for a job first before requesting NOC.');
-          return;
-        }
+        reason = `NOC for ${docFormData.orgName || 'Organization'} - ${docFormData.role || 'Intern'} role`;
+        requestDetails.orgName = docFormData.orgName;
+        requestDetails.role = docFormData.role;
+        requestDetails.mode = docFormData.mode;
+        requestDetails.startDate = docFormData.startDate;
+        requestDetails.duration = docFormData.duration;
       } else if (type === 'LOR Request') {
         docType = 'custom';
         reason = `LOR for ${docFormData.applyingFor}`;
+        requestDetails.applyingFor = docFormData.applyingFor;
+        requestDetails.targetUni = docFormData.targetUni;
+        requestDetails.faculty = docFormData.faculty;
+        requestDetails.achievements = docFormData.achievements;
       } else if (type === 'Bonafide') {
         docType = 'bonafide';
         reason = docFormData.bonafidePurpose;
+        requestDetails.bonafidePurpose = docFormData.bonafidePurpose;
       }
       
       // Call backend API
       const res = await axios.post('/api/documents/', {
         type: docType,
         reason: reason,
-        jobId: jobId || null
+        jobId: null,
+        requestDetails
       });
       
       const newRequest = {

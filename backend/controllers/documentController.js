@@ -1,6 +1,7 @@
 const DocumentRequest = require("../models/DocumentRequest");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
+const DepartmentMentor = require("../models/DepartmentMentor");
 const { generateNoc, validateNocRequirements, getNocPreview, generateLor, generateBonafide } = require('../services/documentGenerator');
 const fs = require('fs');
 const path = require('path');
@@ -13,19 +14,97 @@ const buildSenderMeta = (req) => ({
   },
 });
 
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resolveMentorUserId = async (student) => {
+  if (student?.mentorId) {
+    return student.mentorId;
+  }
+
+  if (student?.department) {
+    const deptRegex = new RegExp(`^${String(student.department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const assignment = await DepartmentMentor.findOne({ department: deptRegex }).select('mentorId').lean();
+    if (assignment?.mentorId) {
+      return assignment.mentorId;
+    }
+
+    const mentorByDept = await User.findOne({ role: 'mentor', department: deptRegex }).select('_id').lean();
+    if (mentorByDept?._id) {
+      return mentorByDept._id;
+    }
+  }
+
+  return null;
+};
+
+const buildDocumentNotification = (type, studentName, requestDetails = {}) => {
+  const documentLabel = {
+    noc: 'NOC Request',
+    bonafide: 'Bonafide Request',
+    custom: 'LOR Request',
+  }[type] || 'Document Request';
+
+  const targetName = requestDetails?.orgName || requestDetails?.applyingFor || 'document details';
+  const message = type === 'noc'
+    ? `${studentName || 'A student'} submitted a NOC request for ${requestDetails?.orgName || 'an organization'} (${requestDetails?.role || 'role not specified'}).`
+    : `${studentName || 'A student'} submitted a ${documentLabel.toLowerCase()} for ${targetName}.`;
+
+  return { documentLabel, message };
+};
+
 // POST /api/documents/request — student requests a document
 exports.requestDocument = async (req, res) => {
   try {
-    const { type, reason, jobId } = req.body;
+    const { type, reason, jobId, requestDetails = {} } = req.body;
+    const student = await User.findById(req.user._id).select('name email department mentorId').lean();
 
     const doc = await DocumentRequest.create({
       studentId: req.user._id,
-      type, reason, jobId: jobId || null,
+      type,
+      reason,
+      requestDetails,
+      jobId: jobId || null,
       mentorApproval:  { status: 'pending' },
       hodApproval:     { status: 'pending' },
       deanApproval:    { status: 'pending' },
       overallStatus: 'pending',
     });
+
+    const mentorUserId = await resolveMentorUserId(student);
+    if (mentorUserId) {
+      try {
+        const { documentLabel, message } = buildDocumentNotification(type, student?.name || 'A student', requestDetails);
+
+        await Notification.send(
+          mentorUserId,
+          'document_status',
+          documentLabel,
+          message,
+          '/mentor-dashboard',
+          { sender: { id: req.user?._id || null, name: student?.name || '', role: 'student' } }
+        );
+      } catch (notifyErr) {
+        // Request should succeed even if notification dispatch fails.
+        console.error('Notification dispatch failed for document request:', notifyErr.message);
+      }
+    } else {
+      try {
+        const mentors = await User.find({ role: 'mentor' }).select('_id').lean();
+        const { documentLabel, message } = buildDocumentNotification(type, student?.name || 'A student', requestDetails);
+        for (const mentor of mentors) {
+          await Notification.send(
+            mentor._id,
+            'document_status',
+            documentLabel,
+            message,
+            '/mentor-dashboard',
+            { sender: { id: req.user?._id || null, name: student?.name || '', role: 'student' } }
+          );
+        }
+      } catch (broadcastErr) {
+        console.error('Mentor broadcast notification failed:', broadcastErr.message);
+      }
+    }
 
     res.status(201).json({ document: doc });
   } catch (err) {
@@ -53,13 +132,7 @@ exports.getPendingDocuments = async (req, res) => {
 
     if (role === 'mentor') {
       filter.overallStatus = 'pending';
-      // additional restriction: only show documents belonging to the mentor's department
-      if (req.user.department) {
-        // find students in that department
-        const students = await User.find({ department: req.user.department, role: 'student' }).select('_id');
-        const ids = students.map(s => s._id);
-        filter.studentId = { $in: ids };
-      }
+      // Show all pending document requests to mentors so request flow never gets blocked by mapping issues.
     } else if (role === 'hod') {
       filter.overallStatus = 'mentor_approved';
     } else if (role === 'dean') {
@@ -124,12 +197,12 @@ exports.approveDocument = async (req, res) => {
           console.log('👤 [Dean] Student ID:', doc.studentId);
           console.log('💼 [Dean] Job ID:', doc.jobId);
           
-          const validation = await validateNocRequirements(doc.studentId, doc.jobId);
+          const validation = await validateNocRequirements(doc.studentId, doc.jobId, doc.requestDetails || {}, doc.reason || '');
           console.log('✅ [Dean] Validation result:', validation.valid);
           
           if (validation.valid) {
             console.log('🚀 [Dean] Starting PDF generation...');
-            const result = await generateNoc(doc.studentId, doc.jobId);
+            const result = await generateNoc(doc.studentId, doc.jobId, doc.requestDetails || {}, doc.reason || '');
             
             console.log('📊 [Dean] Generation result:', {
               success: result.success,
@@ -417,29 +490,67 @@ exports.regenerateDocument = async (req, res) => {
 exports.downloadDocument = async (req, res) => {
   try {
     const { studentId, fileName } = req.params;
+    const decodedFileName = decodeURIComponent(fileName || '');
     
     // Security: Verify student can only download their own documents
     if (req.user._id.toString() !== studentId && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized to download this document' });
     }
     
-    const filePath = path.join(__dirname, `../uploads/documents/${studentId}/${fileName}`);
-    
+    const studentBasePath = path.resolve(__dirname, '../uploads/documents', studentId);
+    let filePath = path.resolve(studentBasePath, decodedFileName);
+
     // Security: Prevent directory traversal attacks
-    if (!filePath.startsWith(path.join(__dirname, '../uploads/documents'))) {
+    if (!(filePath === studentBasePath || filePath.startsWith(studentBasePath + path.sep))) {
       return res.status(400).json({ message: 'Invalid file path' });
     }
-    
-    // Check if file exists
+
+    // If file is missing but the request is issued, regenerate on demand.
+    if (!fs.existsSync(filePath)) {
+      const targetFile = path.basename(decodedFileName);
+      const doc = await DocumentRequest.findOne({
+        studentId,
+        overallStatus: 'issued',
+        generatedDocUrl: { $regex: `${escapeRegex(targetFile)}$` },
+      }).sort({ generatedAt: -1, createdAt: -1 });
+
+      if (doc) {
+        let regenResult = null;
+        if (doc.type === 'noc') {
+          regenResult = await generateNoc(doc.studentId, doc.jobId, doc.requestDetails || {}, doc.reason || '');
+        } else if (doc.type === 'bonafide') {
+          regenResult = await generateBonafide(doc.studentId, { purpose: doc.reason || 'General Purpose' });
+        } else if (doc.type === 'custom') {
+          const applyingFor = doc.reason ? doc.reason.replace(/^LOR for /i, '') : 'Higher Studies';
+          regenResult = await generateLor(doc.studentId, { applyingFor });
+        }
+
+        if (regenResult?.success && regenResult.pdfUrl) {
+          doc.generatedDocUrl = regenResult.pdfUrl;
+          doc.generatedAt = regenResult.generatedAt || new Date();
+          doc.documentVersion = (doc.documentVersion || 0) + 1;
+          await doc.save();
+
+          const marker = `/api/documents/download/${studentId}/`;
+          const idx = String(regenResult.pdfUrl).indexOf(marker);
+          if (idx !== -1) {
+            const regeneratedName = decodeURIComponent(String(regenResult.pdfUrl).slice(idx + marker.length));
+            filePath = path.resolve(studentBasePath, regeneratedName);
+          }
+        }
+      }
+    }
+
+    // Check again after possible regeneration
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ message: 'Document not found' });
     }
     
-    console.log(`📥 [Download] ${req.user.name || req.user.email} downloading: ${fileName}`);
+    console.log(`📥 [Download] ${req.user.name || req.user.email} downloading: ${decodedFileName}`);
     
     // Send file
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
     res.sendFile(filePath);
   } catch (err) {
     console.error('❌ [Download] Error:', err.message);

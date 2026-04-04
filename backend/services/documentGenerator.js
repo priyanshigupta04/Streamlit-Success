@@ -20,6 +20,24 @@ const INSTITUTION_CONFIG = {
   institutionEmail: process.env.INSTITUTION_EMAIL || 'contact@institution.edu',
 };
 
+const parseNocRequestDetails = (reason = '', requestDetails = {}) => {
+  const parsed = { ...requestDetails };
+
+  if (!parsed.orgName || !parsed.role) {
+    const match = String(reason || '').match(/^NOC for\s+(.+?)\s+-\s+(.+?)\s+role\s*$/i);
+    if (match) {
+      if (!parsed.orgName) parsed.orgName = match[1].trim();
+      if (!parsed.role) parsed.role = match[2].trim();
+    }
+  }
+
+  if (!parsed.mode) {
+    parsed.mode = 'In-Office';
+  }
+
+  return parsed;
+};
+
 const getCompiledTemplate = () => {
   try {
     const templatePath = path.join(__dirname, '../templates/noc.hbs');
@@ -46,20 +64,32 @@ const getCompiledTemplate = () => {
  * Fetch all required data for NOC generation
  * @param {ObjectId} studentId - Student's MongoDB ID
  * @param {ObjectId} jobId - Job's MongoDB ID
+ * @param {Object} requestDetails - Saved request form data when no job exists
  * @returns {Promise<Object>} Student, job, and company data
  */
-const fetchNocData = async (studentId, jobId) => {
+const fetchNocData = async (studentId, jobId, requestDetails = {}, reason = '') => {
   try {
     const student = await User.findById(studentId);
     if (!student) throw new Error('Student not found');
+
+    const normalizedRequest = parseNocRequestDetails(reason, requestDetails);
 
     let jobData = null;
     if (jobId) {
       jobData = await Job.findById(jobId).select('title company location stipend');
     }
 
+    if (!jobData && normalizedRequest?.orgName) {
+      jobData = {
+        company: normalizedRequest.orgName,
+        title: normalizedRequest.role || 'Internship',
+        location: normalizedRequest.mode || normalizedRequest.startDate || 'Location not specified',
+        stipend: normalizedRequest.duration || normalizedRequest.applyingFor || 'As per company policy',
+      };
+    }
+
     if (!jobData) {
-      throw new Error('Job details not found. Cannot generate NOC without company information.');
+      throw new Error('NOC request details are incomplete. Cannot generate PDF without organization information.');
     }
 
     return {
@@ -74,7 +104,7 @@ const fetchNocData = async (studentId, jobId) => {
 /**
  * Format data for template rendering
  * @param {Object} student - Student document from DB
- * @param {Object} jobData - Job document from DB
+ * @param {Object} jobData - Job document or request-derived data
  * @returns {Object} Formatted data for Handlebars
  */
 const formatDataForTemplate = (student, jobData) => {
@@ -251,14 +281,15 @@ const saveToLocal = async (pdfBuffer, fileName, studentId) => {
  * Main NOC Generation Function
  * @param {ObjectId} studentId - Student's MongoDB ID
  * @param {ObjectId} jobId - Job's MongoDB ID
+ * @param {Object} requestDetails - Saved request details fallback
  * @returns {Promise<Object>} { pdfUrl, documentId, generatedAt }
  */
-exports.generateNoc = async (studentId, jobId) => {
+exports.generateNoc = async (studentId, jobId, requestDetails = {}, reason = '') => {
   try {
     console.log('📄 [NOC Gen] Starting for student:', studentId, 'job:', jobId);
     
     // Step 1: Fetch data
-    const { student, jobData } = await fetchNocData(studentId, jobId);
+    const { student, jobData } = await fetchNocData(studentId, jobId, requestDetails, reason);
     console.log('📄 [NOC Gen] Data fetched - Student:', student.name, 'Company:', jobData.company);
 
     // Step 2: Format data
@@ -299,16 +330,21 @@ exports.generateNoc = async (studentId, jobId) => {
  * Validate if student can generate NOC
  * @param {ObjectId} studentId - Student's MongoDB ID
  * @param {ObjectId} jobId - Job's MongoDB ID
+ * @param {Object} requestDetails - Saved request details fallback
  * @returns {Promise<Object>} Validation result
  */
-exports.validateNocRequirements = async (studentId, jobId) => {
+exports.validateNocRequirements = async (studentId, jobId, requestDetails = {}, reason = '') => {
   try {
     console.log('🔍 [Validate] Checking NOC requirements...');
     console.log('   StudentID:', studentId);
     console.log('   JobID:', jobId);
     
     const student = await User.findById(studentId);
-    const job = await Job.findById(jobId);
+    const normalizedRequest = parseNocRequestDetails(reason, requestDetails);
+    let job = null;
+    if (jobId) {
+      job = await Job.findById(jobId);
+    }
 
     const errors = [];
 
@@ -327,10 +363,23 @@ exports.validateNocRequirements = async (studentId, jobId) => {
       }
     }
     
-    if (!job) {
-      console.warn('⚠️ [Validate] Job not found');
-      errors.push('Job details not found');
+    if (!job && !normalizedRequest?.orgName) {
+      console.warn('⚠️ [Validate] Job/request details not found');
+      errors.push('Organization details missing');
     } else {
+      const companyName = job?.company || normalizedRequest?.orgName;
+      const jobTitle = job?.title || normalizedRequest?.role;
+      const location = job?.location || normalizedRequest?.mode || normalizedRequest?.startDate || 'N/A';
+      console.log('✅ [Validate] NOC source found:', companyName, jobTitle, location);
+      if (!companyName) {
+        errors.push('Company name missing');
+      }
+      if (!jobTitle) {
+        errors.push('Job title missing');
+      }
+    }
+
+    if (job) {
       console.log('✅ [Validate] Job found:', job.title, 'at', job.company);
       if (!job.company) {
         console.warn('⚠️ [Validate] Missing: company name');

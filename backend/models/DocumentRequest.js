@@ -14,6 +14,18 @@ const docRequestSchema = new mongoose.Schema({
     required: true
   },
   reason:       String,
+  requestDetails: {
+    orgName: String,
+    role: String,
+    mode: String,
+    startDate: String,
+    duration: String,
+    applyingFor: String,
+    targetUni: String,
+    faculty: String,
+    achievements: String,
+    bonafidePurpose: String,
+  },
   jobId:        { type: mongoose.Schema.Types.ObjectId, ref: 'Job' },
 
   mentorApproval: approvalSubSchema,
