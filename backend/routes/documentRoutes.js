@@ -23,7 +23,7 @@ router.get("/analytics/dean",       protect, authorize("dean", "hod"), getDeanAn
 router.put("/:id/approve",          protect, authorize("mentor", "hod", "dean"), approveDocument);
 router.get("/all",                  protect, authorize("placement_cell"), getAllDocuments);
 router.get("/download/:studentId/:fileName", protect, downloadDocument);
-router.delete("/:id",               protect, authorize("placement_cell", "admin"), deleteDocumentById);
+router.delete("/:id",               protect, deleteDocumentById);
 
 // NOC specific routes
 router.get("/noc/preview",          getNocPreview);

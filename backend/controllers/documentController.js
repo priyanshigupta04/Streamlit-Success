@@ -562,10 +562,18 @@ exports.downloadDocument = async (req, res) => {
 exports.deleteDocumentById = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await DocumentRequest.findByIdAndDelete(id);
-    if (!deleted) {
+    const doc = await DocumentRequest.findById(id);
+    if (!doc) {
       return res.status(404).json({ message: 'Document request not found' });
     }
+
+    const canDeleteAny = ['placement_cell', 'admin'].includes(req.user?.role);
+    const isOwner = String(doc.studentId) === String(req.user?._id);
+    if (!canDeleteAny && !isOwner) {
+      return res.status(403).json({ message: 'Not authorized to delete this document request' });
+    }
+
+    await doc.deleteOne();
     return res.json({ message: 'Document request deleted successfully' });
   } catch (err) {
     return res.status(500).json({ message: err.message });
