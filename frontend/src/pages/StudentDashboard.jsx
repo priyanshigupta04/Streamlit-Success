@@ -547,8 +547,9 @@ const StudentDashboard = () => {
   logo: (a.jobId?.company || a.company || '?')[0].toUpperCase(),
   color: 'bg-slate-700',
   status: a.status,
-  
-  mentorApproved: a.mentorApproval?.approved || false,
+
+  mentorApprovalStatus: a.mentorApproval?.status || 'pending',
+  mentorApproved: String(a.mentorApproval?.status || '').toLowerCase() === 'approved',
   interview: a.interview ? {
   date: a.interview.date,
   time: a.interview.time,
@@ -1019,7 +1020,18 @@ const StudentDashboard = () => {
     .filter(job =>
       job.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.company.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    )
+    .filter((job) => {
+      const existingApp = myApplications.find(
+        (a) =>
+          a.jobId?._id === job.id ||
+          a.jobId === job.id ||
+          a.id === job.id ||
+          (a.company === job.company && a.role === job.role)
+      );
+
+      return String(existingApp?.mentorApprovalStatus || '').toLowerCase() !== 'approved';
+    });
   
   const handleApply = async (job) => {
   // Validation: Check if Profile is complete
@@ -1332,6 +1344,17 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {filteredJobs.map(job => {
               const companyTheme = getCompanyTheme(job.company);
+              const existingApp = myApplications.find(
+                (a) =>
+                  a.jobId?._id === job.id ||
+                  a.jobId === job.id ||
+                  a.id === job.id ||
+                  (a.company === job.company && a.role === job.role)
+              );
+              const approvalStatus = String(existingApp?.mentorApprovalStatus || '').toLowerCase();
+              const ctaLabel = existingApp
+                ? (approvalStatus === 'rejected' ? 'Rejected by Mentor' : 'Pending Approval')
+                : 'View Details';
               return (
               <div key={job.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200/60 hover:border-black hover:shadow-lg transition-all group shadow-sm">
                 <div className="flex justify-between items-start mb-8">
@@ -1376,8 +1399,8 @@ const visibleAiWarnings = (aiMeta?.warnings || []).filter((w) => {
                     </div>
                   </div>
                 )}
-                <button onClick={() => handleOpenJobPreview(job)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${myApplications.some(a => a.company === job.company && a.role === job.role) ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 hover:bg-black hover:text-white'}`}>
-                  {myApplications.some(a => a.company === job.company && a.role === job.role) ? 'Pending Approval' : 'View Details'}
+                <button onClick={() => handleOpenJobPreview(job)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${existingApp ? (approvalStatus === 'rejected' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600') : 'bg-slate-100 hover:bg-black hover:text-white'}`}>
+                  {ctaLabel}
                 </button>
               </div>
             );})}

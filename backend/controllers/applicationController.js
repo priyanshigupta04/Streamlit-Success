@@ -348,7 +348,9 @@ exports.updateApplicationStatus = async (req, res) => {
 exports.mentorApproveApplication = async (req, res) => {
   try {
     const { mentorNote } = req.body;
-    const app = await Application.findById(req.params.id).populate('studentId', 'name mentorId email');
+    const app = await Application.findById(req.params.id)
+      .populate('studentId', 'name mentorId email resumeUrl branch cgpa skills phone')
+      .populate('jobId', 'title company location postedBy');
     if (!app) return res.status(404).json({ message: 'Application not found' });
 
     // Check if application is from a student assigned to this mentor (only enforce if student has a mentorId set)
@@ -362,6 +364,13 @@ exports.mentorApproveApplication = async (req, res) => {
       approvedAt: new Date(),
       mentorNote: mentorNote || '',
     };
+
+    // Keep application resume in sync with the latest resume from student profile.
+    const latestProfileResume = app.studentId?.resumeUrl || '';
+    if (latestProfileResume && latestProfileResume !== app.resumeUrl) {
+      app.resumeUrl = latestProfileResume;
+    }
+
     await app.save();
 
     // Notify student that mentor approved their application
@@ -373,6 +382,27 @@ exports.mentorApproveApplication = async (req, res) => {
       '/student-dashboard',
       buildSenderMeta(req)
     );
+
+    // Notify recruiter that mentor approval is complete and include student resume reference.
+    const recruiterId = app.jobId?.postedBy || null;
+    if (recruiterId) {
+      const company = app.jobId?.company || app.company || '';
+      const location = app.jobId?.location || app.location || '';
+      const studentName = app.studentId?.name || 'A student';
+      const studentEmail = app.studentId?.email || 'Email not available';
+      const resumeLine = app.resumeUrl
+        ? `Resume: ${app.resumeUrl}`
+        : 'Resume: Not available on student profile';
+
+      await Notification.send(
+        recruiterId,
+        'application_status',
+        '✅ Mentor Approved Application',
+        `${studentName} (${studentEmail}) has been approved by mentor for ${jobTitle}${company ? ` at ${company}` : ''}${location ? ` (${location})` : ''}. ${resumeLine}`,
+        '/recruiter-dashboard',
+        buildSenderMeta(req)
+      );
+    }
 
     res.json({ 
       message: 'Application approved successfully',

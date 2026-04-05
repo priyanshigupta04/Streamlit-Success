@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { validateProfilePayload } from '../utils/profileValidation';
 import {
   Briefcase, Users, Plus, Clock, Search,
-  MapPin, CheckCircle2, Star, Building2, ArrowRight, LayoutDashboard, Send, Trash2, CalendarDays, Save, Globe,
+  MapPin, CheckCircle2, Star, Building2, ArrowRight, LayoutDashboard, Send, Trash2, CalendarDays, Save, Globe, FileText,
 } from 'lucide-react';
 
 const STATUS_COLORS = {
@@ -33,6 +33,7 @@ const RecruiterDashboard = () => {
   const [cancelingInterviewId, setCancelingInterviewId] = useState(null);
   const [reschedulingInterviewId, setReschedulingInterviewId] = useState(null);
   const [selectedInterview, setSelectedInterview] = useState(null);
+  const [openingResumeStudentId, setOpeningResumeStudentId] = useState('');
 
 
 const [interviewForm, setInterviewForm] = useState({
@@ -254,6 +255,36 @@ const [interviewForm, setInterviewForm] = useState({
       setScheduledInterviews(res.data.interviews || []);
     } catch (err) {
       console.error('Failed to fetch scheduled interviews', err);
+    }
+  };
+
+  const handleViewResume = async (studentId) => {
+    if (!studentId) return;
+    try {
+      setOpeningResumeStudentId(String(studentId));
+      const response = await axios.get(`/api/upload/resume/view/${studentId}`, {
+        responseType: 'blob',
+      });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 30000);
+    } catch (err) {
+      let message = 'Unable to open resume';
+      const responseData = err?.response?.data;
+      if (responseData instanceof Blob) {
+        try {
+          const text = await responseData.text();
+          const parsed = JSON.parse(text);
+          if (parsed?.message) message = parsed.message;
+        } catch (_) {
+          // keep default message
+        }
+      } else if (responseData?.message) {
+        message = responseData.message;
+      }
+      alert(message);
+    } finally {
+      setOpeningResumeStudentId('');
     }
   };
 
@@ -848,6 +879,10 @@ const handleCancelInterview = async (applicationId) => {
                           <div className="space-y-4">
                             {activeApps.map(app => (
                               <div key={app._id} className="bg-white rounded-2xl shadow-md hover:shadow-lg transition p-6 border border-gray-100">
+                                {(() => {
+                                  const studentId = app.studentId?._id;
+                                  return (
+                                    <>
                                 <div className="flex items-center justify-between mb-3">
                                   <div>
                                     <h4 className="font-semibold text-gray-800">{app.studentId?.name || 'Student'}</h4>
@@ -864,6 +899,16 @@ const handleCancelInterview = async (applicationId) => {
                                     </span>
                                   </div>
                                 </div>
+                                {studentId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewResume(studentId)}
+                                    disabled={openingResumeStudentId === String(studentId)}
+                                    className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800 mb-3"
+                                  >
+                                    <FileText size={14} /> {openingResumeStudentId === String(studentId) ? 'Opening Resume...' : 'View Resume'}
+                                  </button>
+                                )}
                                 {app.coverNote && (
                                   <p className="text-sm text-gray-600 mb-3 bg-gray-50 p-3 rounded-lg">{app.coverNote}</p>
                                 )}
@@ -918,6 +963,9 @@ const handleCancelInterview = async (applicationId) => {
                                     </button>
                                   </div>
                                 </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             ))}
                           </div>
@@ -934,10 +982,24 @@ const handleCancelInterview = async (applicationId) => {
                           <div className="space-y-3">
                             {selectedApps.map(app => (
                               <div key={app._id} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition p-5 border-l-4 border-green-500">
+                                {(() => {
+                                  const studentId = app.studentId?._id;
+                                  return (
+                                    <>
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <h4 className="font-bold text-gray-800 text-lg">{app.studentId?.name || 'Student'}</h4>
                                     <p className="text-sm text-gray-500">{app.studentId?.email}</p>
+                                    {studentId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleViewResume(studentId)}
+                                        disabled={openingResumeStudentId === String(studentId)}
+                                        className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800 mt-2"
+                                      >
+                                        <FileText size={14} /> {openingResumeStudentId === String(studentId) ? 'Opening Resume...' : 'View Resume'}
+                                      </button>
+                                    )}
                                   </div>
                                   <div className="text-right">
                                     <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
@@ -945,6 +1007,9 @@ const handleCancelInterview = async (applicationId) => {
                                     </span>
                                   </div>
                                 </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             ))}
                           </div>

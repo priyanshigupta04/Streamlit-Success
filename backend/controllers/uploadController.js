@@ -2,6 +2,8 @@ const axios  = require('axios');
 const crypto = require('crypto');
 const path = require('path');
 const User   = require('../models/User');
+const Job = require('../models/Job');
+const Application = require('../models/Application');
 const Notification = require('../models/Notification');
 const InternshipForm = require('../models/InternshipForm');
 const DEFAULT_AI_SERVICE_URL = 'https://streamlit-success-ai.onrender.com';
@@ -346,13 +348,33 @@ const viewResume = async (req, res) => {
       req.user.role === 'mentor' &&
       student.mentorId &&
       student.mentorId.toString() === req.user._id.toString();
+
+    let isRecruiterForStudent = false;
+    if (req.user.role === 'recruiter') {
+      // Primary: recruiter owns the job where student applied.
+      const recruiterJobs = await Job.find({ postedBy: req.user._id }).select('_id').lean();
+      const recruiterJobIds = recruiterJobs.map((job) => job._id);
+
+      if (recruiterJobIds.length) {
+        isRecruiterForStudent = !!(await Application.exists({
+          studentId,
+          jobId: { $in: recruiterJobIds },
+        }));
+      }
+
+      // Fallback: some legacy records may not keep job ownership linkage clean.
+      if (!isRecruiterForStudent) {
+        isRecruiterForStudent = !!(await Application.exists({ studentId }));
+      }
+    }
+
     const isSameDepartmentMentor =
       req.user.role === 'mentor' &&
       student.department &&
       req.user.department &&
       student.department.toLowerCase() === req.user.department.toLowerCase();
 
-    if (!(isOwner || isPlacement || isAssignedMentor || isSameDepartmentMentor)) {
+    if (!(isOwner || isPlacement || isAssignedMentor || isSameDepartmentMentor || isRecruiterForStudent)) {
       return res.status(403).json({ message: 'Not authorized to view this resume' });
     }
 
